@@ -1,0 +1,622 @@
+Yang Sudah Oke Banget (Keep It!)
+central_stocks vs room_stocks: Pemisahan ini cerdas. Laundry punya state (Kotor/Cuci/Bersih), sedangkan ruangan cuma butuh tahu "Ada berapa barang di sini?".
+
+Transaction Types: Enum OUT_DISTRIBUTION, WASH_START, dll sudah meng-cover siklus hidup linen.
+
+Nullable room_id di Transaksi: Ini life-saver. Saat proses cuci (Internal Laundry), kita nggak butuh ID ruangan. Desain ini fleksibel.
+
+Saran Perbaikan & Optimasi (Biar Makin Pro)
+Ada beberapa poin kecil yang bisa bikin database kamu lebih "badak" dan siap untuk fitur masa depan:
+
+1. Implementasi Dynamic Roles (Sesuai Request)
+Jangan bikin roda baru, Bestie. Di Laravel, standar industri untuk ini adalah package spatie/laravel-permission. Tapi kalau mau bikin tabel manual (native), strukturnya seperti ini:
+
+Tambahan Tabel untuk Role Management:
+erDiagram
+    USERS ||--o{ MODEL_HAS_ROLES : assigned
+    ROLES ||--o{ MODEL_HAS_ROLES : has
+    ROLES ||--o{ ROLE_HAS_PERMISSIONS : has
+    PERMISSIONS ||--o{ ROLE_HAS_PERMISSIONS : belongs_to
+
+    ROLES {
+        bigint id PK
+        string name "admin, head_nurse, laundry_staff"
+        string guard_name "web"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    PERMISSIONS {
+        bigint id PK
+        string name "create_transaction, view_reports, manage_users"
+        string guard_name "web"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    MODEL_HAS_ROLES {
+        bigint role_id FK
+        string model_type "App\Models\User"
+        bigint model_id FK
+    }
+
+    ROLE_HAS_PERMISSIONS {
+        bigint permission_id FK
+        bigint role_id FK
+    }
+
+Kenapa begini? Dengan begini Admin bisa bikin role baru (misal: "Supervisor Laundry") lewat dashboard dan centang permission apa saja yang boleh dia akses, tanpa kamu harus koding ulang.
+
+2. Soft Deletes (Penting untuk Audit)
+Di Rumah Sakit, data haram hukumnya dihapus permanen. Bayangkan kalau ada selisih stok, tapi user yang input sudah dihapus? Bahaya.
+
+Saran: Tambahkan kolom deleted_at (timestamp, nullable) di tabel users, linens, dan rooms. Gunakan fitur SoftDeletes di Model Laravel.
+
+3. Catatan Masalah "Lifespan Cycles" (Siklus Cuci)
+Di tabel LINENS kamu ada lifespan_cycles. Ini bagus untuk referensi pabrik. TAPI, karena sistem ini Bulk Tracking (jumlah) dan bukan Item Tracking (per lembar pakai RFID/Barcode unik), kamu tidak akan bisa melacak umur sprei secara spesifik.
+
+Masalah: Kamu punya 100 sprei. 50 baru beli kemarin, 50 beli tahun lalu. Semuanya kode SKU sama. Saat dicuci, sistem nggak tahu mana yang sprei baru, mana yang lama.
+
+Solusi: Kolom lifespan_cycles tetap simpan saja sebagai data referensi (misal: "Sprei ini harusnya rusak setelah 100x cuci"). Nanti di laporan, kamu bisa pakai estimasi turnover rate.
+
+4. Kunci Integritas Stok (Mencegah Minus)
+Di level database (Migration), pastikan stok tidak bisa minus dengan Unsigned Integer atau constraint, tapi karena kadang ada adjustment, validasi logic di Laravel Service lebih krusial.
+
+Final Revised Schema (Markdown Ready) sudah menerapkan Dynamic Roles (spatie):
+erDiagram
+    %% USER & ROLE MANAGEMENT (Dynamic)
+    USERS ||--o{ MODEL_HAS_ROLES : assigned
+    ROLES ||--o{ MODEL_HAS_ROLES : has
+    ROLES ||--o{ ROLE_HAS_PERMISSIONS : contains
+    PERMISSIONS ||--o{ ROLE_HAS_PERMISSIONS : part_of
+
+    %% MASTER DATA
+    LINEN_CATEGORIES ||--o{ LINENS : groups
+    LINENS ||--o{ CENTRAL_STOCKS : stored_in
+    LINENS ||--o{ ROOM_STOCKS : allocated_to
+    ROOMS ||--o{ ROOM_STOCKS : keeps
+
+    %% TRANSACTIONS
+    USERS ||--o{ TRANSACTIONS : executes
+    ROOMS ||--o{ TRANSACTIONS : location_ref
+    TRANSACTIONS ||--o{ TRANSACTION_DETAILS : contains
+    LINENS ||--o{ TRANSACTION_DETAILS : item_ref
+
+    USERS {
+        bigint id PK
+        string name
+        string email UK
+        string password
+        timestamp created_at
+        timestamp updated_at
+        timestamp deleted_at "Soft Deletes"
+    }
+
+    ROLES {
+        bigint id PK
+        string name "admin, laundry_staff, nurse"
+        string guard_name "web"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    PERMISSIONS {
+        bigint id PK
+        string name "view_dashboard, create_trx, approve_disposal"
+        string guard_name "web"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    MODEL_HAS_ROLES {
+        bigint role_id FK
+        string model_type "App\Models\User"
+        bigint model_id FK
+    }
+
+    ROLE_HAS_PERMISSIONS {
+        bigint permission_id FK
+        bigint role_id FK
+    }
+
+    LINEN_CATEGORIES {
+        bigint id PK
+        string name
+        string slug UK
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    LINENS {
+        bigint id PK
+        bigint linen_category_id FK
+        string name
+        string sku_code UK
+        int weight_gram
+        int lifespan_cycles_estimate "Referensi umur pabrik"
+        timestamp created_at
+        timestamp updated_at
+        timestamp deleted_at "Soft Deletes"
+    }
+
+    ROOMS {
+        bigint id PK
+        string name
+        enum type "WARD|ICU|OT|OFFICE"
+        timestamp created_at
+        timestamp updated_at
+        timestamp deleted_at "Soft Deletes"
+    }
+
+    CENTRAL_STOCKS {
+        bigint id PK
+        bigint linen_id FK
+        int clean_qty "Ready Stok"
+        int dirty_qty "Kotor di gudang"
+        int washing_qty "Sedang dicuci"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    ROOM_STOCKS {
+        bigint id PK
+        bigint room_id FK
+        bigint linen_id FK
+        int current_qty "Fisik di ruangan"
+        int par_stock "Kuota wajib"
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    TRANSACTIONS {
+        bigint id PK
+        string trx_code UK
+        enum type "OUT_DISTRIBUTION|IN_COLLECTION|WASH_START|WASH_FINISH|ADJUSTMENT|DISPOSAL"
+        bigint room_id FK "Nullable: Only for Distribution/Collection"
+        bigint user_id FK
+        date trx_date
+        text notes
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    TRANSACTION_DETAILS {
+        bigint id PK
+        bigint transaction_id FK
+        bigint linen_id FK
+        int qty
+        timestamp created_at
+        timestamp updated_at
+    }
+
+Selanjutnya Menentukan Role & Permission (Hak Akses) sebelum mulai coding adalah langkah krusial. Ini yang membedakan aplikasi "asal jalan" dengan aplikasi enterprise yang aman.
+
+Di lingkungan Rumah Sakit besar (seperti RS Sanglah), hierarki itu ketat. Kita tidak boleh membiarkan staf biasa mengubah Master Data, dan kita tidak boleh membiarkan perawat di satu ruangan mengintip data ruangan lain.
+
+Berikut adalah analisis 4 Role Utama yang paling ideal untuk sistem LinenFlow, lengkap dengan fungsi dan detail permission-nya.
+
+1. Super Admin (IT / Sistem)
+Persona: Staf IT RS atau Vendor Developer. Fungsi: Menjaga "kesehatan" sistem, bukan operasional linen harian.
+
+Tanggung Jawab:
+
+Setup awal aplikasi.
+
+Manajemen User (Tambah pegawai baru, Reset password).
+
+Assignment Role (Siapa jadi apa).
+
+Hak Akses (Permissions):
+
+manage_users: Create, Read, Update, Delete (CRUD) data user.
+
+assign_roles: Memberikan role ke user.
+
+view_system_logs: Melihat siapa melakukan apa (Audit Trail).
+
+Note: Sebaiknya Super Admin TIDAK ikut campur input transaksi harian agar data tetap murni operasional.
+
+2. Laundry Manager (Kepala Instalasi)
+Persona: Kepala Unit Laundry / Manajer Operasional. Fungsi: Pengambil keputusan, pemegang kendali stok, dan auditor.
+
+Tanggung Jawab:
+
+Mengatur Master Data (Jenis Linen, Daftar Ruangan, Standar Par Stock).
+
+Melakukan Stock Opname (Penyesuaian stok jika ada selisih).
+
+Approval pemusnahan barang (Afkir) untuk linen rusak.
+
+Menganalisa laporan kehilangan/keuangan.
+
+Hak Akses (Permissions):
+
+manage_master_data: CRUD Linen & Rooms.
+
+create_adjustment: Melakukan koreksi stok manual (kewenangan tinggi).
+
+approve_disposal: Menyetujui linen dibuang/dihapus dari aset.
+
+view_financial_reports: Melihat laporan rugi/laba aset.
+
+view_all_stats: Melihat dashboard global semua ruangan.
+
+3. Laundry Operator (Staf Operasional)
+Persona: Staf yang bekerja di gudang laundry, mencuci, dan melipat. Fungsi: Ujung tombak input data harian. User yang paling sering login.
+
+Tanggung Jawab:
+
+Mencatat linen kotor masuk (Infection/Non-Infection).
+
+Mencatat proses cuci (Start/Finish).
+
+Mencatat distribusi linen bersih ke ruangan.
+
+Hak Akses (Permissions):
+
+create_transaction_in: Input linen kotor.
+
+create_transaction_out: Input kirim linen bersih.
+
+create_transaction_process: Update status cuci.
+
+view_own_dashboard: Melihat stok gudang laundry saat ini.
+
+Restriction: TIDAK BISA edit Master Data, TIDAK BISA hapus transaksi yang sudah disimpan (harus lapor Manager kalau salah input), TIDAK BISA lihat nilai uang/harga aset.
+
+4. Head Nurse (Kepala Ruangan)
+Persona: Kepala Perawat di Ruang Rawat Inap (misal: KaRu Mawar). Fungsi: Konsumen linen. Memastikan stok di ruangannya cukup untuk pasien.
+
+Tanggung Jawab:
+
+Memantau stok real-time di ruangannya sendiri.
+
+(Opsional) Melakukan Request Order jika stok menipis mendadak.
+
+Validasi penerimaan (Tanda terima digital saat linen bersih datang).
+
+Hak Akses (Permissions):
+
+view_room_stock: Hanya bisa melihat stok ruangannya sendiri (Scope Data).
+
+create_request: Membuat permintaan tambahan.
+
+confirm_receipt: Mengklik tombol "Diterima" saat barang datang.
+
+Implementasi Teknis di Laravel (Best Practices)
+Karena kamu pakai Spatie Laravel Permission, implementasinya di kode akan sangat rapi.
+
+1. Mencegah Akses Route (Routes/web.php) Gunakan middleware bawaan Spatie.
+// Group untuk Admin
+Route::group(['middleware' => ['role:super_admin']], function () {
+    Route::resource('users', UserController::class);
+});
+
+// Group untuk Manager Laundry
+Route::group(['middleware' => ['role:laundry_manager']], function () {
+    Route::resource('linens', LinenController::class);
+    Route::get('/reports/financial', [ReportController::class, 'financial']);
+});
+
+2. Mencegah Tombol Muncul di Blade (Frontend) Gunakan directive @can biar UI bersih. User biasa gak perlu lihat tombol yang gak bisa mereka klik.
+
+@can('approve_disposal')
+    <button wire:click="deleteItem({{ $item->id }})" class="bg-red-500 text-white ...">
+        Musnahkan Aset (Afkir)
+    </button>
+@endcan
+
+@can('create_trx_distribution')
+    <a href="/distribution/create" class="bg-blue-500 ...">
+        Distribusi Baru
+    </a>
+@endcan
+
+3. Scope Query (Data Isolation) Untuk Head Nurse, pastikan dia cuma bisa lihat datanya sendiri. Jangan filter di Blade, filter di Controller/Query!
+
+// RoomStockController.php
+public function index()
+{
+    $user = auth()->user();
+
+    // Jika user adalah Kepala Ruangan, filter query
+    if ($user->hasRole('head_nurse')) {
+        // Asumsi user punya relasi ke room_id
+        $stocks = RoomStock::where('room_id', $user->room_id)->get();
+    } else {
+        // Manager bisa lihat semua
+        $stocks = RoomStock::all();
+    }
+    
+    return view('stocks.index', compact('stocks'));
+}
+
+Gunakan SATU Panel (Single Panel / Layout) saja.Kenapa Satu Panel Lebih Baik?Daripada kamu bikin 3 layout terpisah (misal: AdminLayout, NurseLayout, StaffLayout) yang isinya duplikasi kode (header sama, footer sama, sidebar beda dikit), lebih baik gunakan Satu Layout Dinamis.Di Laravel + Tailwind, kita cukup merender sidebar menu berdasarkan Permission yang dimiliki user yang sedang login.Jika User punya permission manage_users $\rightarrow$ Tampilkan Menu "Users".Jika tidak $\rightarrow$ Hide menu tersebut.Ini lebih scalable. Kalau nanti ada role baru (misal: "Auditor Eksternal"), kamu nggak perlu bikin layout baru, cukup atur permission-nya saja.
+
+1. Struktur Menu & Submenu (Sitemap)
+Berikut adalah rancangan menu navigasi yang efektif untuk LinenFlow. Aku susun berdasarkan alur kerja (workflow) agar user nggak bingung.
+
+Group A: Dashboard & Overview
+Menu ini muncul untuk semua user, tapi isinya beda-beda (Widget Admin vs Widget Perawat).
+Menu Utama,Submenu,Fungsi,Permission Required
+Dashboard,-,"Halaman utama berisi ringkasan statistik (Stok kritis, Grafik cucian).",view_dashboard
+
+Group B: Operasional (Harian)
+Menu "tempur" untuk staf laundry dan perawat.
+Menu Utama,Submenu,Fungsi,Permission Required
+Sirkulasi Linen,Distribusi Bersih,Input pengiriman linen bersih dari laundry ke ruangan.,create_trx_distribution
+,Penerimaan Kotor,Input linen kotor yang diambil dari ruangan.,create_trx_collection
+,Konfirmasi Terima,(Khusus Perawat) Klik terima saat linen bersih sampai.,confirm_receipt
+Produksi,Proses Cuci,Ubah status stok dari Dirty → Washing → Clean.,create_transaction_process
+,Afkir Barang,Input pemusnahan linen rusak/sobek.,create_adjustment
+
+Group C: Monitoring Stok (Inventory)
+Menu untuk melihat posisi aset.
+Menu Utama,Submenu,Fungsi,Permission Required
+Inventaris,Stok Gudang,Lihat stok real-time di Laundry (Bersih/Kotor).,view_own_dashboard
+,Stok Ruangan,Lihat sebaran linen di seluruh ruangan RS.,view_all_stats
+,Stock Opname,Form untuk penyesuaian stok manual (reset stok).,create_adjustment
+
+Group D: Laporan & Analisa
+Menu untuk level manajerial.
+Menu Utama,Submenu,Fungsi,Permission Required
+Laporan,Log Transaksi,Riwayat detail siapa kirim apa dan kapan.,view_global_report
+,Analisa Kehilangan,Laporan selisih (Dikirim vs Kembali).,view_financial_reports
+,Kinerja Laundry,Grafik jumlah cuci (kg) per hari/bulan.,view_global_report
+
+Group E: Master Data (Konfigurasi)
+Menu "Dapur" aplikasi.
+Menu Utama,Submenu,Fungsi,Permission Required
+Data Master,Katalog Linen,"CRUD jenis linen, berat, dan SKU.",manage_master_data
+,Data Ruangan,CRUD nama ruangan dan target stok (Par Stock).,manage_master_data
+,Kategori,"Kelola kategori (Bedding, Baju, OK).",manage_master_data
+
+Group F: Pengaturan Sistem (Super Admin)
+Menu area terlarang untuk user biasa.
+Menu Utama,Submenu,Fungsi,Permission Required
+System,Manajemen User,"Tambah user baru, reset password.",manage_users
+,Roles & Akses,Mengatur role apa boleh akses menu apa.,assign_roles
+
+2. Implementasi Teknis "Dynamic Menu" di Laravel
+Supaya kamu bisa mengatur akses menu secara dinamis (tanpa hardcode if-else berantakan di View), kita gunakan pendekatan Configuration Array.
+
+Langkah 1: Buat Konfigurasi Menu
+Buat file baru config/navigation.php. Di sini kita definisikan struktur menu beserta permission-nya.
+
+// config/navigation.php
+return [
+    'menu' => [
+        [
+            'name' => 'Dashboard',
+            'icon' => 'home',
+            'route' => 'dashboard',
+            'permission' => 'view_dashboard', // Semua user punya ini
+        ],
+        [
+            'name' => 'Operasional',
+            'icon' => 'truck',
+            'permission' => 'create_trx_distribution', // Cek permission group
+            'submenu' => [
+                [
+                    'name' => 'Distribusi Bersih',
+                    'route' => 'transaction.distribution',
+                    'permission' => 'create_trx_distribution',
+                ],
+                [
+                    'name' => 'Terima Kotor',
+                    'route' => 'transaction.collection',
+                    'permission' => 'create_trx_collection',
+                ],
+            ]
+        ],
+        [
+            'name' => 'System',
+            'icon' => 'settings',
+            'permission' => 'manage_users',
+            'submenu' => [
+                [
+                    'name' => 'Users',
+                    'route' => 'users.index',
+                    'permission' => 'manage_users',
+                ],
+                [
+                    'name' => 'Roles',
+                    'route' => 'roles.index',
+                    'permission' => 'assign_roles',
+                ],
+            ]
+        ],
+    ]
+];
+
+Langkah 2: Komponen Sidebar (Blade)
+Di layout sidebar kamu (resources/views/layouts/sidebar.blade.php), kita lakukan looping cerdas. Kita hanya render menu jika user punya permission tersebut.
+
+<nav class="space-y-1">
+    @foreach(config('navigation.menu') as $item)
+        
+        {{-- Cek apakah user boleh lihat menu utama ini --}}
+        @can($item['permission'])
+            
+            {{-- Jika tidak ada submenu (Single Link) --}}
+            @if(!isset($item['submenu']))
+                <a href="{{ route($item['route']) }}" 
+                   class="flex items-center px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                    <x-icon name="{{ $item['icon'] }}" class="mr-4 h-6 w-6"/>
+                    {{ $item['name'] }}
+                </a>
+            
+            {{-- Jika ada Submenu (Dropdown) --}}
+            @else
+                <div x-data="{ open: false }" class="space-y-1">
+                    <button @click="open = !open" type="button" 
+                            class="w-full flex items-center justify-between px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50">
+                        <div class="flex items-center">
+                            <x-icon name="{{ $item['icon'] }}" class="mr-4 h-6 w-6"/>
+                            {{ $item['name'] }}
+                        </div>
+                        <svg :class="{'rotate-90': open}" class="w-5 h-5 transition-transform" ...></svg>
+                    </button>
+
+                    <div x-show="open" class="space-y-1 pl-11" style="display: none;">
+                        @foreach($item['submenu'] as $sub)
+                            {{-- Cek permission per submenu --}}
+                            @can($sub['permission'])
+                                <a href="{{ route($sub['route']) }}" 
+                                   class="block px-2 py-2 text-sm font-medium text-gray-500 rounded-md hover:text-gray-900 hover:bg-gray-50">
+                                    {{ $sub['name'] }}
+                                </a>
+                            @endcan
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
+        @endcan
+    @endforeach
+</nav>
+
+Keuntungan Cara Ini:
+Centralized Control: Kalau mau ganti urutan menu, tinggal edit config/navigation.php. Nggak perlu acak-acak HTML.
+
+Secure: Menu benar-benar hilang dari HTML (bukan cuma di-hide CSS) kalau user nggak punya hak akses.
+
+Flexible: Admin bisa mengatur akses via fitur "Role Management" (Assign Permission ke Role), dan sidebar akan otomatis menyesuaikan diri tanpa kamu koding ulang.
+
+Selanjutnya terkait menu admin,
+Sebenarnya, ini adalah pendekatan yang sangat umum di dunia Enterprise Software. Biasanya peran ini disebut "Auditor" atau "Observer", tapi sering kali peran Super Admin juga butuh kemampuan ini untuk troubleshooting.
+
+Bayangkan skenario ini: User di lapangan komplain "Error nih nggak bisa input!". Sebagai Admin, kamu harus bisa buka halaman yang sama untuk melihat apa yang mereka lihat, tapi tanpa risiko kamu nggak sengaja ngubah data stok.
+
+Analisis & Konsekuensi
+Jika kita terapkan ini, ada perubahan strategi sedikit di Logic Permission kita.
+
+Decoupling (Pemisahan) View vs Action:
+
+Sebelumnya: Menu "Distribusi" muncul KARENA user punya hak create_trx_distribution.
+
+Sekarang: Menu "Distribusi" muncul jika user punya hak view_distribution_page. Tapi tombol "Simpan"-nya hanya muncul jika punya hak create_trx_distribution.
+
+Granular Permissions: Kita harus memecah permission menjadi lebih detail (Atomic).
+
+Implementasi Teknis (Laravel + Spatie)
+Berikut cara memodifikasinya agar Admin bisa See All, Touch None.
+
+1. Update Skema Permission (Seeder)
+Kita perlu membedakan antara hak "Melihat Halaman/Menu" dan "Melakukan Aksi".
+Fitur,Permission: view_... (Akses Menu),Permission: create_... (Akses Tombol)
+Distribusi Linen,view_distribution_menu,create_distribution_trx
+Penerimaan Kotor,view_collection_menu,create_collection_trx
+Proses Cuci,view_washing_menu,create_washing_trx
+
+Pembagian Role:
+
+Laundry Operator: Punya view + create (Bisa lihat menu & bisa input).
+
+Super Admin: Punya view saja (Bisa lihat menu, tapi tombol disable/hilang).
+
+2. Update Config Menu (config/navigation.php)
+Ubah pengecekan permission di config menu agar mengacu pada permission view_....
+
+// config/navigation.php
+return [
+    'menu' => [
+        // ...
+        [
+            'name' => 'Operasional',
+            'icon' => 'truck',
+            'permission' => 'view_distribution_menu', // Admin & Operator punya ini
+            'submenu' => [
+                [
+                    'name' => 'Distribusi Bersih',
+                    'route' => 'transaction.distribution',
+                    'permission' => 'view_distribution_menu', // Admin BISA akses
+                ],
+                // ...
+            ]
+        ],
+    ]
+];
+
+3. Kunci UI di Frontend (Blade + Tailwind)
+Nah, ini trik utamanya. Saat Admin membuka halaman Form Distribusi, kita buat semua input jadi disabled dan sembunyikan tombol Submit.
+
+Contoh file: resources/views/livewire/distribution-form.blade.php
+
+<div>
+    {{-- Header Halaman --}}
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold">Input Distribusi Linen</h2>
+
+        {{-- Banner Peringatan untuk Admin (View Only Mode) --}}
+        @cannot('create_distribution_trx')
+            <span class="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm font-medium border border-amber-200">
+                👁️ View Only Mode
+            </span>
+        @endcannot
+    </div>
+
+    <form wire:submit="save">
+        
+        {{-- Input Field: Disable jika TIDAK punya hak create --}}
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Pilih Ruangan</label>
+                <select 
+                    wire:model="roomId" 
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-500"
+                    {{-- Magic Attribute Laravel: Disabled jika user tidak bisa create --}}
+                    @disabled(!auth()->user()->can('create_distribution_trx'))
+                >
+                    <option value="">-- Pilih --</option>
+                    @foreach($rooms as $room)
+                        <option value="{{ $room->id }}">{{ $room->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            {{-- Input lainnya sama, tambahkan @disabled(...) --}}
+        </div>
+
+        {{-- Tabel Input Item Bulk --}}
+        <table class="w-full mt-4">
+            {{-- ... --}}
+        </table>
+
+        {{-- Tombol Action --}}
+        <div class="mt-6 flex justify-end gap-3">
+            
+            {{-- Tombol Simpan HANYA muncul jika punya hak create --}}
+            @can('create_distribution_trx')
+                <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">
+                    Simpan Transaksi
+                </button>
+            @else
+                {{-- Opsi: Tampilkan tombol dummy disabled biar layout gak geser --}}
+                <button type="button" disabled class="bg-gray-300 text-gray-500 px-4 py-2 rounded-md cursor-not-allowed">
+                    Simpan Terkunci (Read Only)
+                </button>
+            @endcan
+            
+        </div>
+    </form>
+</div>
+
+4. Kunci Backend (Controller/Livewire Component)
+Jangan cuma kunci di tampilan (Frontend), Backend juga wajib dijaga. Siapa tahu ada Admin iseng yang pakai Postman atau Inspect Element buat maksa kirim data.
+
+// App/Livewire/DistributionForm.php
+
+public function save()
+{
+    // Double Check: Pastikan user punya hak create sebelum proses simpan
+    if (!auth()->user()->can('create_distribution_trx')) {
+        abort(403, 'Bestie, kamu cuma boleh lihat-lihat aja ya! 🚫');
+    }
+
+    // Lanjut proses simpan...
+    $this->validate(...);
+    // ...
+}
+
+Ini membuat Admin memiliki "Visibility" penuh tanpa mengorbankan "Data Integrity".Tips Tambahan:Karena Admin melihat semua menu, pastikan Dashboard Admin tetap bersih.Mungkin saat Admin klik menu "Distribusi", jangan langsung diarahkan ke Form Input Baru (Create Page), tapi arahkan ke Halaman Index/List Riwayat (Index Page).Operator: Klik menu $\rightarrow$ Masuk form input (Karena kerjaannya input).Admin: Klik menu $\rightarrow$ Masuk tabel riwayat data hari ini (Karena tujuannya monitoring).
