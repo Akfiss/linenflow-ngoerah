@@ -8,6 +8,7 @@ use App\Http\Controllers\LinenCategoryController;
 use App\Http\Controllers\LinenController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WashingController;
@@ -43,6 +44,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/manager/dashboard', [DashboardController::class, 'index'])->name('dashboard.manager');
     Route::get('/operator/dashboard', [DashboardController::class, 'index'])->name('dashboard.operator');
     Route::get('/head-nurse/dashboard', [DashboardController::class, 'index'])->name('dashboard.nurse');
+    Route::get('/admin/dashboard/export-logs', [DashboardController::class, 'exportActivityLogs'])->name('dashboard.export-logs');
     
     // Legacy/Fallback (redirects based on role, handled in Controller or Middleware usually, but keeping route as safety)
     Route::get('/dashboard', function() {
@@ -102,12 +104,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::prefix('inventaris')->name('inventory.')->group(function () {
-        Route::get('/stok-gudang', [ReportController::class, 'stockSummary'])
-            ->name('central-stock')
+    Route::prefix('inventaris')->name('inventaris.')->group(function () {
+        Route::get('/gudang', [ReportController::class, 'centralStock'])
+            ->name('gudang')
             ->middleware('permission:view_own_dashboard');
-        Route::get('/stok-ruangan', [ReportController::class, 'roomStockSummary'])
-            ->name('room-stock')
+        Route::get('/gudang/export', [ReportController::class, 'exportCentralStock'])
+            ->name('gudang.export')
+            ->middleware('permission:view_own_dashboard');
+        Route::get('/ruangan', [ReportController::class, 'roomStock'])
+            ->name('ruangan')
             ->middleware('permission:view_all_stats');
     });
 
@@ -117,13 +122,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::prefix('laporan')->name('reports.')->group(function () {
+    Route::prefix('laporan')->name('laporan.')->group(function () {
         Route::get('/transaksi', [ReportController::class, 'transactionLog'])
-            ->name('transactions')
+            ->name('transaksi')
             ->middleware('permission:view_global_report');
-        Route::get('/lost-found', [ReportController::class, 'lostAndFound'])
-            ->name('lost-found')
-            ->middleware('permission:view_financial_reports');
+        Route::get('/transaksi/export', [ReportController::class, 'exportTransactions'])
+            ->name('transaksi.export')
+            ->middleware('permission:view_global_report');
+        Route::get('/kinerja', [ReportController::class, 'performance'])
+            ->name('kinerja')
+            ->middleware('permission:view_global_report');
     });
 
     /*
@@ -154,6 +162,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('users', UserController::class)->except(['create', 'show', 'edit']);
         Route::post('/users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
         Route::post('/users/{user}/restore', [UserController::class, 'restore'])->name('users.restore')->withTrashed();
+    });
+
+    Route::prefix('system')->name('system.')->middleware('permission:assign_roles')->group(function () {
+        Route::resource('roles', RoleController::class)->except(['create', 'show', 'edit']);
     });
 });
 
@@ -210,6 +222,39 @@ if (app()->environment('local')) {
                 'permissions' => $rolePermissions['head_nurse'],
                 'roles' => ['head_nurse']
             ]
+        ]);
+    });
+
+    // Preview routes for System pages (User Management & Roles)
+    Route::get('/preview/system/users', function () use ($rolePermissions) {
+        return Inertia::render('System/Users/Index', [
+            'auth' => [
+                'user' => ['name' => 'Preview Admin', 'email' => 'admin@preview.com', 'role' => 'super_admin'],
+                'permissions' => $rolePermissions['super_admin'],
+                'roles' => ['super_admin']
+            ],
+            'users' => [
+                'data' => [],
+                'current_page' => 1,
+                'last_page' => 1,
+                'per_page' => 10,
+                'total' => 0,
+            ],
+            'roles' => [],
+            'rooms' => [],
+        ]);
+    });
+
+    Route::get('/preview/system/roles', function () use ($rolePermissions) {
+        return Inertia::render('System/Roles/Index', [
+            'auth' => [
+                'user' => ['name' => 'Preview Admin', 'email' => 'admin@preview.com', 'role' => 'super_admin'],
+                'permissions' => $rolePermissions['super_admin'],
+                'roles' => ['super_admin']
+            ],
+            'roles' => [],
+            'permissions' => [],
+            'selectedRole' => null,
         ]);
     });
     
