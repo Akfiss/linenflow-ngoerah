@@ -1,17 +1,42 @@
-import { useState, PropsWithChildren, ReactNode } from "react";
+import { useState, PropsWithChildren, ReactNode, useEffect } from "react";
 import { usePage } from "@inertiajs/react";
 import { AppSidebar } from "@/Components/AppSidebar";
 import { AppHeader } from "@/Components/AppHeader";
+import { Toaster } from "@/Components/ui/toaster";
+import { useToast } from "@/hooks/use-toast";
+import { PageProps } from "@/types";
 
 export default function Authenticated({
     header,
     children,
 }: PropsWithChildren<{ header?: ReactNode }>) {
-    const { user } = usePage().props;
+    const { props } = usePage<PageProps>();
+    const { user, flash } = props;
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const { toast } = useToast();
+
+    useEffect(() => {
+        if (flash?.success) {
+            toast({
+                title: "Berhasil",
+                description: flash.success,
+                className: "bg-emerald-50 border-emerald-200 text-emerald-800",
+            });
+        }
+        if (flash?.error) {
+            toast({
+                title: "Error",
+                description: flash.error,
+                variant: "destructive",
+                className:
+                    "animate-shake bg-red-50 border-red-300 text-red-800",
+            });
+        }
+    }, [flash]);
 
     return (
         <div className="flex h-screen w-full bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-sans overflow-hidden">
+            <Toaster />
             {/* Sidebar */}
             <AppSidebar
                 className={

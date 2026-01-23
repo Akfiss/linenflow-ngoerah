@@ -1,4 +1,4 @@
-import { Config } from 'ziggy-js';
+import { Config } from "ziggy-js";
 
 export interface User {
     id: number;
@@ -14,4 +14,8 @@ export type PageProps<
         user: User;
     };
     ziggy: Config & { location: string };
+    flash: {
+        success?: string;
+        error?: string;
+    };
 };

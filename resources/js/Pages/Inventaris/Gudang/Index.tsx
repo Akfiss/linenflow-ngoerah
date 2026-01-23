@@ -18,6 +18,11 @@ import {
     Sparkles,
     Loader2,
     AlertTriangle,
+    ChevronLeft,
+    ChevronRight,
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown,
 } from "lucide-react";
 
 interface Linen {
@@ -44,8 +49,16 @@ interface Category {
     name: string;
 }
 
+interface PaginatedStocks {
+    data: Stock[];
+    current_page: number;
+    last_page: number;
+    total: number;
+    links: Array<{ url: string | null; label: string; active: boolean }>;
+}
+
 interface Props {
-    stocks: Stock[];
+    stocks: PaginatedStocks;
     totals: {
         clean: number;
         dirty: number;
@@ -56,6 +69,8 @@ interface Props {
     filters: {
         search: string | null;
         category: string | null;
+        sort: string;
+        direction: string;
     };
 }
 
@@ -70,14 +85,47 @@ export default function StokGudang({
         filters?.category || "all",
     );
 
-    const applyFilters = () => {
+    const applyFilters = (
+        overrides: Record<string, string | undefined> = {},
+    ) => {
         router.get(
             route("inventaris.gudang"),
             {
-                search: searchQuery || undefined,
-                category: categoryFilter !== "all" ? categoryFilter : undefined,
+                search:
+                    overrides.search !== undefined
+                        ? overrides.search
+                        : searchQuery || undefined,
+                category:
+                    overrides.category !== undefined
+                        ? overrides.category !== "all"
+                            ? overrides.category
+                            : undefined
+                        : categoryFilter !== "all"
+                          ? categoryFilter
+                          : undefined,
+                sort: overrides.sort ?? filters?.sort,
+                direction: overrides.direction ?? filters?.direction,
             },
             { preserveState: true, preserveScroll: true },
+        );
+    };
+
+    const handleSort = (field: string) => {
+        const newDirection =
+            filters?.sort === field && filters?.direction === "asc"
+                ? "desc"
+                : "asc";
+        applyFilters({ sort: field, direction: newDirection });
+    };
+
+    const SortIcon = ({ field }: { field: string }) => {
+        if (filters?.sort !== field) {
+            return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+        }
+        return filters?.direction === "asc" ? (
+            <ArrowUp className="h-3 w-3 ml-1" />
+        ) : (
+            <ArrowDown className="h-3 w-3 ml-1" />
         );
     };
 
@@ -88,6 +136,12 @@ export default function StokGudang({
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter") {
             applyFilters();
+        }
+    };
+
+    const goToPage = (url: string | null) => {
+        if (url) {
+            router.get(url, {}, { preserveState: true, preserveScroll: true });
         }
     };
 
@@ -201,14 +255,7 @@ export default function StokGudang({
                         value={categoryFilter}
                         onValueChange={(v) => {
                             setCategoryFilter(v);
-                            router.get(
-                                route("inventaris.gudang"),
-                                {
-                                    search: searchQuery || undefined,
-                                    category: v !== "all" ? v : undefined,
-                                },
-                                { preserveState: true, preserveScroll: true },
-                            );
+                            applyFilters({ category: v });
                         }}
                     >
                         <SelectTrigger className="w-full sm:w-[200px]">
@@ -223,7 +270,7 @@ export default function StokGudang({
                             ))}
                         </SelectContent>
                     </Select>
-                    <Button onClick={applyFilters}>Cari</Button>
+                    <Button onClick={() => applyFilters()}>Cari</Button>
                 </div>
 
                 {/* Stock Table */}
@@ -232,19 +279,71 @@ export default function StokGudang({
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-semibold tracking-wider">
-                                    <th className="p-4 pl-6">SKU</th>
-                                    <th className="p-4">Nama Linen</th>
-                                    <th className="p-4">Kategori</th>
-                                    <th className="p-4 text-center">Bersih</th>
-                                    <th className="p-4 text-center">Kotor</th>
-                                    <th className="p-4 text-center">Cuci</th>
+                                    <th
+                                        className="p-4 pl-6 cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("sku_code")}
+                                    >
+                                        <div className="flex items-center">
+                                            SKU
+                                            <SortIcon field="sku_code" />
+                                        </div>
+                                    </th>
+                                    <th
+                                        className="p-4 cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("linen_name")}
+                                    >
+                                        <div className="flex items-center">
+                                            Nama Linen
+                                            <SortIcon field="linen_name" />
+                                        </div>
+                                    </th>
+                                    <th
+                                        className="p-4 cursor-pointer hover:bg-slate-100"
+                                        onClick={() =>
+                                            handleSort("category_name")
+                                        }
+                                    >
+                                        <div className="flex items-center">
+                                            Kategori
+                                            <SortIcon field="category_name" />
+                                        </div>
+                                    </th>
+                                    <th
+                                        className="p-4 text-center cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("clean_qty")}
+                                    >
+                                        <div className="flex items-center justify-center">
+                                            Bersih
+                                            <SortIcon field="clean_qty" />
+                                        </div>
+                                    </th>
+                                    <th
+                                        className="p-4 text-center cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("dirty_qty")}
+                                    >
+                                        <div className="flex items-center justify-center">
+                                            Kotor
+                                            <SortIcon field="dirty_qty" />
+                                        </div>
+                                    </th>
+                                    <th
+                                        className="p-4 text-center cursor-pointer hover:bg-slate-100"
+                                        onClick={() =>
+                                            handleSort("washing_qty")
+                                        }
+                                    >
+                                        <div className="flex items-center justify-center">
+                                            Cuci
+                                            <SortIcon field="washing_qty" />
+                                        </div>
+                                    </th>
                                     <th className="p-4 text-center pr-6">
                                         Total
                                     </th>
                                 </tr>
                             </thead>
                             <tbody className="text-sm divide-y divide-slate-200">
-                                {stocks?.length === 0 ? (
+                                {stocks?.data?.length === 0 ? (
                                     <tr>
                                         <td
                                             colSpan={7}
@@ -254,7 +353,7 @@ export default function StokGudang({
                                         </td>
                                     </tr>
                                 ) : (
-                                    stocks?.map((stock) => {
+                                    stocks?.data?.map((stock) => {
                                         const total =
                                             stock.clean_qty +
                                             stock.dirty_qty +
@@ -299,6 +398,52 @@ export default function StokGudang({
                                 )}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Pagination */}
+                    <div className="p-4 border-t flex items-center justify-between text-xs text-slate-500">
+                        <span>
+                            Showing {stocks?.data?.length || 0} of{" "}
+                            {stocks?.total || 0} items
+                        </span>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                    goToPage(
+                                        stocks?.links?.find((l) =>
+                                            l.label.includes("Previous"),
+                                        )?.url || null,
+                                    )
+                                }
+                                disabled={stocks?.current_page <= 1}
+                            >
+                                <ChevronLeft className="h-4 w-4 mr-1" />
+                                Previous
+                            </Button>
+                            <span className="flex items-center px-2">
+                                Page {stocks?.current_page} of{" "}
+                                {stocks?.last_page}
+                            </span>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                    goToPage(
+                                        stocks?.links?.find((l) =>
+                                            l.label.includes("Next"),
+                                        )?.url || null,
+                                    )
+                                }
+                                disabled={
+                                    stocks?.current_page >= stocks?.last_page
+                                }
+                            >
+                                Next
+                                <ChevronRight className="h-4 w-4 ml-1" />
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -19,6 +19,9 @@ import {
     ArrowRightLeft,
     Filter,
     X,
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown,
 } from "lucide-react";
 
 interface User {
@@ -73,6 +76,8 @@ interface Props {
         date_from: string | null;
         date_to: string | null;
         search: string | null;
+        sort: string;
+        direction: string;
     };
 }
 
@@ -93,18 +98,59 @@ export default function LogTransaksi({
         search: filters?.search || "",
     });
 
-    const applyFilters = () => {
+    const applyFilters = (
+        overrides: Record<string, string | undefined> = {},
+    ) => {
         router.get(
             route("laporan.transaksi"),
             {
-                type: localFilters.type || undefined,
-                room: localFilters.room || undefined,
-                user: localFilters.user || undefined,
-                date_from: localFilters.date_from || undefined,
-                date_to: localFilters.date_to || undefined,
-                search: localFilters.search || undefined,
+                type:
+                    overrides.type !== undefined
+                        ? overrides.type
+                        : localFilters.type || undefined,
+                room:
+                    overrides.room !== undefined
+                        ? overrides.room
+                        : localFilters.room || undefined,
+                user:
+                    overrides.user !== undefined
+                        ? overrides.user
+                        : localFilters.user || undefined,
+                date_from:
+                    overrides.date_from !== undefined
+                        ? overrides.date_from
+                        : localFilters.date_from || undefined,
+                date_to:
+                    overrides.date_to !== undefined
+                        ? overrides.date_to
+                        : localFilters.date_to || undefined,
+                search:
+                    overrides.search !== undefined
+                        ? overrides.search
+                        : localFilters.search || undefined,
+                sort: overrides.sort ?? filters?.sort,
+                direction: overrides.direction ?? filters?.direction,
             },
             { preserveState: true, preserveScroll: true },
+        );
+    };
+
+    const handleSort = (field: string) => {
+        const newDirection =
+            filters?.sort === field && filters?.direction === "asc"
+                ? "desc"
+                : "asc";
+        applyFilters({ sort: field, direction: newDirection });
+    };
+
+    const SortIcon = ({ field }: { field: string }) => {
+        if (filters?.sort !== field) {
+            return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+        }
+        return filters?.direction === "asc" ? (
+            <ArrowUp className="h-3 w-3 ml-1" />
+        ) : (
+            <ArrowDown className="h-3 w-3 ml-1" />
         );
     };
 
@@ -215,7 +261,7 @@ export default function LogTransaksi({
                             placeholder="Cari kode transaksi..."
                         />
                     </div>
-                    <Button onClick={applyFilters}>Cari</Button>
+                    <Button onClick={() => applyFilters()}>Cari</Button>
                 </div>
 
                 {/* Filter Panel */}
@@ -324,7 +370,7 @@ export default function LogTransaksi({
 
                             <div className="flex gap-2">
                                 <Button
-                                    onClick={applyFilters}
+                                    onClick={() => applyFilters()}
                                     className="flex-1"
                                 >
                                     Terapkan
@@ -347,11 +393,51 @@ export default function LogTransaksi({
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-semibold tracking-wider">
-                                    <th className="p-4 pl-6">Kode</th>
-                                    <th className="p-4">Tanggal</th>
-                                    <th className="p-4">Tipe</th>
-                                    <th className="p-4">Ruangan</th>
-                                    <th className="p-4">User</th>
+                                    <th
+                                        className="p-4 pl-6 cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("trx_code")}
+                                    >
+                                        <div className="flex items-center">
+                                            Kode
+                                            <SortIcon field="trx_code" />
+                                        </div>
+                                    </th>
+                                    <th
+                                        className="p-4 cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("trx_date")}
+                                    >
+                                        <div className="flex items-center">
+                                            Tanggal
+                                            <SortIcon field="trx_date" />
+                                        </div>
+                                    </th>
+                                    <th
+                                        className="p-4 cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("type")}
+                                    >
+                                        <div className="flex items-center">
+                                            Tipe
+                                            <SortIcon field="type" />
+                                        </div>
+                                    </th>
+                                    <th
+                                        className="p-4 cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("room_name")}
+                                    >
+                                        <div className="flex items-center">
+                                            Ruangan
+                                            <SortIcon field="room_name" />
+                                        </div>
+                                    </th>
+                                    <th
+                                        className="p-4 cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("user_name")}
+                                    >
+                                        <div className="flex items-center">
+                                            User
+                                            <SortIcon field="user_name" />
+                                        </div>
+                                    </th>
                                     <th className="p-4">Item</th>
                                     <th className="p-4 pr-6">Catatan</th>
                                 </tr>
@@ -430,6 +516,10 @@ export default function LogTransaksi({
                                 <ChevronLeft className="h-4 w-4 mr-1" />
                                 Previous
                             </Button>
+                            <span className="flex items-center px-2">
+                                Page {transactions?.current_page} of{" "}
+                                {transactions?.last_page}
+                            </span>
                             <Button
                                 variant="outline"
                                 size="sm"

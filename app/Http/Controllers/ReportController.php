@@ -36,18 +36,46 @@ class ReportController extends Controller
             });
         }
 
-        $stocks = $query->get();
+        // Sorting
+        $sortField = $request->get('sort', 'id');
+        $sortDirection = $request->get('direction', 'desc');
+        
+        // Handle sorting by related fields
+        if (in_array($sortField, ['linen_name', 'sku_code', 'category_name'])) {
+            if ($sortField === 'linen_name') {
+                $query->join('linens', 'central_stocks.linen_id', '=', 'linens.id')
+                      ->orderBy('linens.name', $sortDirection)
+                      ->select('central_stocks.*');
+            } elseif ($sortField === 'sku_code') {
+                $query->join('linens', 'central_stocks.linen_id', '=', 'linens.id')
+                      ->orderBy('linens.sku_code', $sortDirection)
+                      ->select('central_stocks.*');
+            } elseif ($sortField === 'category_name') {
+                $query->join('linens', 'central_stocks.linen_id', '=', 'linens.id')
+                      ->leftJoin('linen_categories', 'linens.linen_category_id', '=', 'linen_categories.id')
+                      ->orderBy('linen_categories.name', $sortDirection)
+                      ->select('central_stocks.*');
+            }
+        } else {
+            $query->orderBy($sortField, $sortDirection);
+        }
 
-        // Calculate totals
+        // Get all for totals calculation
+        $allStocks = CentralStock::all();
+
+        // Calculate totals from all data
         $totals = [
-            'clean' => $stocks->sum('clean_qty'),
-            'dirty' => $stocks->sum('dirty_qty'),
-            'washing' => $stocks->sum('washing_qty'),
-            'total' => $stocks->sum('clean_qty') + $stocks->sum('dirty_qty') + $stocks->sum('washing_qty'),
+            'clean' => $allStocks->sum('clean_qty'),
+            'dirty' => $allStocks->sum('dirty_qty'),
+            'washing' => $allStocks->sum('washing_qty'),
+            'total' => $allStocks->sum('clean_qty') + $allStocks->sum('dirty_qty') + $allStocks->sum('washing_qty'),
         ];
 
         // Get categories for filter
         $categories = \App\Models\LinenCategory::orderBy('name')->get();
+
+        // Paginate
+        $stocks = $query->paginate(10)->withQueryString();
 
         return Inertia::render('Inventaris/Gudang/Index', [
             'stocks' => $stocks,
@@ -56,6 +84,8 @@ class ReportController extends Controller
             'filters' => [
                 'search' => $request->search,
                 'category' => $request->category,
+                'sort' => $sortField,
+                'direction' => $sortDirection,
             ],
         ]);
     }
@@ -85,7 +115,27 @@ class ReportController extends Controller
             $query->whereColumn('current_qty', '<', 'par_stock');
         }
 
-        $stocks = $query->get();
+        // Sorting
+        $sortField = $request->get('sort', 'id');
+        $sortDirection = $request->get('direction', 'desc');
+        
+        // Handle sorting by related fields
+        if ($sortField === 'room_name') {
+            $query->join('rooms', 'room_stocks.room_id', '=', 'rooms.id')
+                  ->orderBy('rooms.name', $sortDirection)
+                  ->select('room_stocks.*');
+        } elseif ($sortField === 'linen_name') {
+            $query->join('linens', 'room_stocks.linen_id', '=', 'linens.id')
+                  ->orderBy('linens.name', $sortDirection)
+                  ->select('room_stocks.*');
+        } elseif ($sortField === 'difference') {
+            $query->orderByRaw("(current_qty - par_stock) {$sortDirection}");
+        } else {
+            $query->orderBy($sortField, $sortDirection);
+        }
+
+        // Paginate
+        $stocks = $query->paginate(10)->withQueryString();
 
         // Get rooms for filter
         $rooms = Room::orderBy('name')->get();
@@ -101,6 +151,8 @@ class ReportController extends Controller
                 'room' => $request->room,
                 'search' => $request->search,
                 'low_stock' => $request->low_stock,
+                'sort' => $sortField,
+                'direction' => $sortDirection,
             ],
         ]);
     }
@@ -140,7 +192,24 @@ class ReportController extends Controller
             $query->where('trx_code', 'like', "%{$request->search}%");
         }
 
-        $transactions = $query->latest('trx_date')->paginate(15)->withQueryString();
+        // Sorting
+        $sortField = $request->get('sort', 'trx_date');
+        $sortDirection = $request->get('direction', 'desc');
+        
+        // Handle sorting by related fields
+        if ($sortField === 'user_name') {
+            $query->leftJoin('users', 'transactions.user_id', '=', 'users.id')
+                  ->orderBy('users.name', $sortDirection)
+                  ->select('transactions.*');
+        } elseif ($sortField === 'room_name') {
+            $query->leftJoin('rooms', 'transactions.room_id', '=', 'rooms.id')
+                  ->orderBy('rooms.name', $sortDirection)
+                  ->select('transactions.*');
+        } else {
+            $query->orderBy($sortField, $sortDirection);
+        }
+
+        $transactions = $query->paginate(10)->withQueryString();
 
         // Get filter options
         $rooms = Room::orderBy('name')->get();
@@ -166,6 +235,8 @@ class ReportController extends Controller
                 'date_from' => $request->date_from,
                 'date_to' => $request->date_to,
                 'search' => $request->search,
+                'sort' => $sortField,
+                'direction' => $sortDirection,
             ],
         ]);
     }

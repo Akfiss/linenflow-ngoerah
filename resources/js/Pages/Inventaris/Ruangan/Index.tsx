@@ -11,17 +11,19 @@ import {
     SelectValue,
 } from "@/Components/ui/select";
 import {
-    DoorOpen,
+    Building2,
     Search,
     AlertTriangle,
-    CheckCircle,
-    Package,
+    ChevronLeft,
+    ChevronRight,
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown,
 } from "lucide-react";
 
 interface Linen {
     id: number;
     name: string;
-    sku_code: string;
 }
 
 interface Room {
@@ -29,7 +31,7 @@ interface Room {
     name: string;
 }
 
-interface Stock {
+interface RoomStock {
     id: number;
     room_id: number;
     linen_id: number;
@@ -39,14 +41,24 @@ interface Stock {
     linen: Linen;
 }
 
+interface PaginatedStocks {
+    data: RoomStock[];
+    current_page: number;
+    last_page: number;
+    total: number;
+    links: Array<{ url: string | null; label: string; active: boolean }>;
+}
+
 interface Props {
-    stocks: Stock[];
+    stocks: PaginatedStocks;
     rooms: Room[];
     lowStockCount: number;
     filters: {
         room: string | null;
         search: string | null;
         low_stock: string | null;
+        sort: string;
+        direction: string;
     };
 }
 
@@ -62,15 +74,53 @@ export default function StokRuangan({
         filters?.low_stock === "true",
     );
 
-    const applyFilters = () => {
+    const applyFilters = (
+        overrides: Record<string, string | undefined> = {},
+    ) => {
         router.get(
             route("inventaris.ruangan"),
             {
-                search: searchQuery || undefined,
-                room: roomFilter !== "all" ? roomFilter : undefined,
-                low_stock: showLowStock ? "true" : undefined,
+                room:
+                    overrides.room !== undefined
+                        ? overrides.room !== "all"
+                            ? overrides.room
+                            : undefined
+                        : roomFilter !== "all"
+                          ? roomFilter
+                          : undefined,
+                search:
+                    overrides.search !== undefined
+                        ? overrides.search
+                        : searchQuery || undefined,
+                low_stock:
+                    overrides.low_stock !== undefined
+                        ? overrides.low_stock
+                        : showLowStock
+                          ? "true"
+                          : undefined,
+                sort: overrides.sort ?? filters?.sort,
+                direction: overrides.direction ?? filters?.direction,
             },
             { preserveState: true, preserveScroll: true },
+        );
+    };
+
+    const handleSort = (field: string) => {
+        const newDirection =
+            filters?.sort === field && filters?.direction === "asc"
+                ? "desc"
+                : "asc";
+        applyFilters({ sort: field, direction: newDirection });
+    };
+
+    const SortIcon = ({ field }: { field: string }) => {
+        if (filters?.sort !== field) {
+            return <ArrowUpDown className="h-3 w-3 ml-1 opacity-40" />;
+        }
+        return filters?.direction === "asc" ? (
+            <ArrowUp className="h-3 w-3 ml-1" />
+        ) : (
+            <ArrowDown className="h-3 w-3 ml-1" />
         );
     };
 
@@ -83,36 +133,32 @@ export default function StokRuangan({
     const toggleLowStock = () => {
         const newValue = !showLowStock;
         setShowLowStock(newValue);
-        router.get(
-            route("inventaris.ruangan"),
-            {
-                search: searchQuery || undefined,
-                room: roomFilter !== "all" ? roomFilter : undefined,
-                low_stock: newValue ? "true" : undefined,
-            },
-            { preserveState: true, preserveScroll: true },
-        );
+        applyFilters({ low_stock: newValue ? "true" : undefined });
+    };
+
+    const goToPage = (url: string | null) => {
+        if (url) {
+            router.get(url, {}, { preserveState: true, preserveScroll: true });
+        }
     };
 
     const getStockStatus = (current: number, par: number) => {
-        const percentage = (current / par) * 100;
-        if (percentage < 50)
+        if (current >= par) {
             return {
-                status: "critical",
-                color: "text-red-600",
-                bg: "bg-red-100",
+                label: "Normal",
+                color: "bg-emerald-100 text-emerald-700 border-emerald-200",
             };
-        if (percentage < 75)
+        } else if (current >= par * 0.5) {
             return {
-                status: "low",
-                color: "text-amber-600",
-                bg: "bg-amber-100",
+                label: "Rendah",
+                color: "bg-amber-100 text-amber-700 border-amber-200",
             };
-        return {
-            status: "normal",
-            color: "text-emerald-600",
-            bg: "bg-emerald-100",
-        };
+        } else {
+            return {
+                label: "Kritis",
+                color: "bg-red-100 text-red-700 border-red-200",
+            };
+        }
     };
 
     return (
@@ -124,17 +170,17 @@ export default function StokRuangan({
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex flex-col gap-1">
                         <h2 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                            <DoorOpen className="h-6 w-6 text-primary" />
+                            <Building2 className="h-6 w-6 text-primary" />
                             Stok Ruangan
                         </h2>
                         <p className="text-slate-500 text-sm">
-                            Monitoring stok linen di setiap ruangan.
+                            Monitoring stok linen per ruangan.
                         </p>
                     </div>
                     {lowStockCount > 0 && (
-                        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg">
-                            <AlertTriangle className="h-5 w-5 text-amber-600" />
-                            <span className="text-amber-700 font-medium">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-700">
+                            <AlertTriangle className="h-4 w-4" />
+                            <span className="text-sm font-medium">
                                 {lowStockCount} item di bawah par stock
                             </span>
                         </div>
@@ -158,17 +204,7 @@ export default function StokRuangan({
                         value={roomFilter}
                         onValueChange={(v) => {
                             setRoomFilter(v);
-                            router.get(
-                                route("inventaris.ruangan"),
-                                {
-                                    search: searchQuery || undefined,
-                                    room: v !== "all" ? v : undefined,
-                                    low_stock: showLowStock
-                                        ? "true"
-                                        : undefined,
-                                },
-                                { preserveState: true, preserveScroll: true },
-                            );
+                            applyFilters({ room: v });
                         }}
                     >
                         <SelectTrigger className="w-full sm:w-[200px]">
@@ -194,7 +230,7 @@ export default function StokRuangan({
                         <AlertTriangle className="h-4 w-4" />
                         Low Stock Only
                     </Button>
-                    <Button onClick={applyFilters}>Cari</Button>
+                    <Button onClick={() => applyFilters()}>Cari</Button>
                 </div>
 
                 {/* Stock Table */}
@@ -203,22 +239,60 @@ export default function StokRuangan({
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-semibold tracking-wider">
-                                    <th className="p-4 pl-6">Ruangan</th>
-                                    <th className="p-4">Linen</th>
-                                    <th className="p-4 text-center">
-                                        Stok Saat Ini
+                                    <th
+                                        className="p-4 pl-6 cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("room_name")}
+                                    >
+                                        <div className="flex items-center">
+                                            Ruangan
+                                            <SortIcon field="room_name" />
+                                        </div>
                                     </th>
-                                    <th className="p-4 text-center">
-                                        Par Stock
+                                    <th
+                                        className="p-4 cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("linen_name")}
+                                    >
+                                        <div className="flex items-center">
+                                            Linen
+                                            <SortIcon field="linen_name" />
+                                        </div>
                                     </th>
-                                    <th className="p-4 text-center">Selisih</th>
+                                    <th
+                                        className="p-4 text-center cursor-pointer hover:bg-slate-100"
+                                        onClick={() =>
+                                            handleSort("current_qty")
+                                        }
+                                    >
+                                        <div className="flex items-center justify-center">
+                                            Stok Saat Ini
+                                            <SortIcon field="current_qty" />
+                                        </div>
+                                    </th>
+                                    <th
+                                        className="p-4 text-center cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("par_stock")}
+                                    >
+                                        <div className="flex items-center justify-center">
+                                            Par Stock
+                                            <SortIcon field="par_stock" />
+                                        </div>
+                                    </th>
+                                    <th
+                                        className="p-4 text-center cursor-pointer hover:bg-slate-100"
+                                        onClick={() => handleSort("difference")}
+                                    >
+                                        <div className="flex items-center justify-center">
+                                            Selisih
+                                            <SortIcon field="difference" />
+                                        </div>
+                                    </th>
                                     <th className="p-4 text-center pr-6">
                                         Status
                                     </th>
                                 </tr>
                             </thead>
                             <tbody className="text-sm divide-y divide-slate-200">
-                                {stocks?.length === 0 ? (
+                                {stocks?.data?.length === 0 ? (
                                     <tr>
                                         <td
                                             colSpan={6}
@@ -228,62 +302,44 @@ export default function StokRuangan({
                                         </td>
                                     </tr>
                                 ) : (
-                                    stocks?.map((stock) => {
-                                        const diff =
+                                    stocks?.data?.map((stock) => {
+                                        const difference =
                                             stock.current_qty - stock.par_stock;
-                                        const { status, color, bg } =
-                                            getStockStatus(
-                                                stock.current_qty,
-                                                stock.par_stock,
-                                            );
-
+                                        const status = getStockStatus(
+                                            stock.current_qty,
+                                            stock.par_stock,
+                                        );
                                         return (
                                             <tr
                                                 key={stock.id}
-                                                className={`hover:bg-slate-50/80 transition-colors ${status === "critical" ? "bg-red-50/30" : ""}`}
+                                                className="hover:bg-slate-50/80 transition-colors"
                                             >
-                                                <td className="p-4 pl-6">
-                                                    <div className="flex items-center gap-2">
-                                                        <DoorOpen className="h-4 w-4 text-slate-400" />
-                                                        <span className="font-medium text-slate-900">
-                                                            {stock.room?.name ||
-                                                                "-"}
-                                                        </span>
-                                                    </div>
+                                                <td className="p-4 pl-6 font-medium text-slate-900">
+                                                    {stock.room?.name || "-"}
                                                 </td>
                                                 <td className="p-4 text-slate-600">
                                                     {stock.linen?.name || "-"}
                                                 </td>
-                                                <td className="p-4 text-center">
-                                                    <span className="font-bold text-slate-900 text-lg">
-                                                        {stock.current_qty}
-                                                    </span>
+                                                <td className="p-4 text-center font-bold text-slate-900">
+                                                    {stock.current_qty}
                                                 </td>
                                                 <td className="p-4 text-center text-slate-600">
                                                     {stock.par_stock}
                                                 </td>
                                                 <td className="p-4 text-center">
                                                     <span
-                                                        className={`font-medium ${diff < 0 ? "text-red-600" : "text-emerald-600"}`}
+                                                        className={`font-medium ${difference >= 0 ? "text-emerald-600" : "text-red-600"}`}
                                                     >
-                                                        {diff > 0 ? "+" : ""}
-                                                        {diff}
+                                                        {difference >= 0
+                                                            ? `+${difference}`
+                                                            : difference}
                                                     </span>
                                                 </td>
                                                 <td className="p-4 text-center pr-6">
                                                     <span
-                                                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${bg} ${color}`}
+                                                        className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${status.color}`}
                                                     >
-                                                        {status === "normal" ? (
-                                                            <CheckCircle className="h-3.5 w-3.5" />
-                                                        ) : (
-                                                            <AlertTriangle className="h-3.5 w-3.5" />
-                                                        )}
-                                                        {status === "critical"
-                                                            ? "Kritis"
-                                                            : status === "low"
-                                                              ? "Rendah"
-                                                              : "Normal"}
+                                                        {status.label}
                                                     </span>
                                                 </td>
                                             </tr>
@@ -292,6 +348,52 @@ export default function StokRuangan({
                                 )}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Pagination */}
+                    <div className="p-4 border-t flex items-center justify-between text-xs text-slate-500">
+                        <span>
+                            Showing {stocks?.data?.length || 0} of{" "}
+                            {stocks?.total || 0} items
+                        </span>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                    goToPage(
+                                        stocks?.links?.find((l) =>
+                                            l.label.includes("Previous"),
+                                        )?.url || null,
+                                    )
+                                }
+                                disabled={stocks?.current_page <= 1}
+                            >
+                                <ChevronLeft className="h-4 w-4 mr-1" />
+                                Previous
+                            </Button>
+                            <span className="flex items-center px-2">
+                                Page {stocks?.current_page} of{" "}
+                                {stocks?.last_page}
+                            </span>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                    goToPage(
+                                        stocks?.links?.find((l) =>
+                                            l.label.includes("Next"),
+                                        )?.url || null,
+                                    )
+                                }
+                                disabled={
+                                    stocks?.current_page >= stocks?.last_page
+                                }
+                            >
+                                Next
+                                <ChevronRight className="h-4 w-4 ml-1" />
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>
