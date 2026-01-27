@@ -18,11 +18,17 @@ class Transaction extends Model
         'user_id',
         'trx_date',
         'notes',
+        'status',
+        'confirmed_at',
+        'confirmed_by',
+        'confirmation_notes',
     ];
 
     protected $casts = [
         'trx_date' => 'date',
+        'confirmed_at' => 'datetime',
     ];
+
 
     /**
      * Transaction type constants.
@@ -57,6 +63,15 @@ class Transaction extends Model
     {
         return $this->hasMany(TransactionDetail::class);
     }
+
+    /**
+     * Get the user who confirmed this transaction.
+     */
+    public function confirmedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'confirmed_by');
+    }
+
 
     /**
      * Get available transaction types with labels.

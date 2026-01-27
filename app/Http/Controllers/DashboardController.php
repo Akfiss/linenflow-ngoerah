@@ -68,17 +68,94 @@ class DashboardController extends Controller
             ->groupBy('type')
             ->pluck('count', 'type');
 
+        // Generate chart data for distribution trends
+        // Last 7 days
+        $chart7Days = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $date = now()->subDays($i);
+            $count = Transaction::where('type', Transaction::TYPE_OUT_DISTRIBUTION)
+                ->whereDate('trx_date', $date->toDateString())
+                ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
+                ->sum('transaction_details.qty');
+            
+            $chart7Days[] = [
+                'name' => $date->locale('id')->isoFormat('ddd'),
+                'date' => $date->toDateString(),
+                'total' => (int) $count,
+            ];
+        }
+
+        // Last 30 days (grouped by week)
+        $chart30Days = [];
+        for ($i = 4; $i >= 0; $i--) {
+            $startDate = now()->subWeeks($i)->startOfWeek();
+            $endDate = now()->subWeeks($i)->endOfWeek();
+            $count = Transaction::where('type', Transaction::TYPE_OUT_DISTRIBUTION)
+                ->whereBetween('trx_date', [$startDate->toDateString(), $endDate->toDateString()])
+                ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
+                ->sum('transaction_details.qty');
+            
+            $chart30Days[] = [
+                'name' => 'W' . $startDate->weekOfYear,
+                'date' => $startDate->format('d/m') . '-' . $endDate->format('d/m'),
+                'total' => (int) $count,
+            ];
+        }
+
+        // This month (grouped by day)
+        $chartThisMonth = [];
+        $daysInMonth = now()->daysInMonth;
+        $currentDay = now()->day;
+        
+        // Show last 10 days of activity up to today
+        $startDay = max(1, $currentDay - 9);
+        for ($day = $startDay; $day <= $currentDay; $day++) {
+            $date = now()->startOfMonth()->addDays($day - 1);
+            $count = Transaction::where('type', Transaction::TYPE_OUT_DISTRIBUTION)
+                ->whereDate('trx_date', $date->toDateString())
+                ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
+                ->sum('transaction_details.qty');
+            
+            $chartThisMonth[] = [
+                'name' => $date->format('d'),
+                'date' => $date->toDateString(),
+                'total' => (int) $count,
+            ];
+        }
+
+        // Calculate total distributed for each period
+        $total7Days = array_sum(array_column($chart7Days, 'total'));
+        $total30Days = array_sum(array_column($chart30Days, 'total'));
+        $totalThisMonth = array_sum(array_column($chartThisMonth, 'total'));
+
+
         // Get total counts
         $totalLinens = Linen::count();
         $totalRooms = Room::count();
 
-        // For Head Nurse - get only their room's stock
+        // For Head Nurse - get only their room's stock and transactions
         $ownRoomStock = null;
+        $ownRoomPending = 0;
+        $ownRoomTransactions = [];
         if ($user && $user->room_id) {
             $ownRoomStock = RoomStock::with('linen')
                 ->where('room_id', $user->room_id)
                 ->get();
+            
+            // Get pending distributions for this room
+            $ownRoomPending = Transaction::where('room_id', $user->room_id)
+                ->where('type', Transaction::TYPE_OUT_DISTRIBUTION)
+                ->where('status', 'pending')
+                ->count();
+            
+            // Get recent transactions for this room
+            $ownRoomTransactions = Transaction::with(['user', 'details.linen'])
+                ->where('room_id', $user->room_id)
+                ->orderBy('created_at', 'desc')
+                ->limit(10)
+                ->get();
         }
+
 
         // Super Admin specific stats
         $totalUsers = User::count();
@@ -135,8 +212,21 @@ class DashboardController extends Controller
             'lowStockRooms' => $lowStockRooms,
             'recentTransactions' => $recentTransactions,
             'monthlyTransactions' => $monthlyTransactions,
+            'chartData' => [
+                'last7Days' => $chart7Days,
+                'last30Days' => $chart30Days,
+                'thisMonth' => $chartThisMonth,
+                'totals' => [
+                    'last7Days' => $total7Days,
+                    'last30Days' => $total30Days,
+                    'thisMonth' => $totalThisMonth,
+                ],
+            ],
             'ownRoomStock' => $ownRoomStock,
+            'ownRoomPending' => $ownRoomPending,
+            'ownRoomTransactions' => $ownRoomTransactions,
             'activityLogs' => $activityLogs,
+
             'filters' => [
                 'action' => $request->action,
                 'status' => $request->status,
@@ -149,6 +239,7 @@ class DashboardController extends Controller
                 'users' => $allUsers,
             ],
         ]);
+
     }
 
     /**

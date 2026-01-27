@@ -74,6 +74,7 @@ class UserController extends Controller
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => bcrypt($validated['password']),
+            'role' => $validated['role'],
             'room_id' => $validated['room_id'] ?? null,
         ]);
 
@@ -106,6 +107,7 @@ class UserController extends Controller
         $user->update([
             'name' => $validated['name'],
             'email' => $validated['email'],
+            'role' => $validated['role'],
             'room_id' => $validated['room_id'] ?? null,
         ]);
 

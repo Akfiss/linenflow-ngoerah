@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/Components/ui/card";
 import { Button } from "@/Components/ui/button";
 import {
@@ -8,9 +9,6 @@ import {
     XAxis,
     YAxis,
     CartesianGrid,
-    defs,
-    linearGradient,
-    stop,
 } from "recharts";
 import {
     Check,
@@ -28,20 +26,115 @@ import {
     CalendarDays,
     Minus,
 } from "lucide-react";
-import { usePage } from "@inertiajs/react";
+import { usePage, Link } from "@inertiajs/react";
 
-const data = [
-    { name: "Senin", total: 1200 },
-    { name: "Selasa", total: 1800 },
-    { name: "Rabu", total: 1400 },
-    { name: "Kamis", total: 2600 },
-    { name: "Jumat", total: 1800 },
-    { name: "Sabtu", total: 3200 },
-    { name: "Minggu", total: 2400 },
-];
+// Types for props
+interface Stats {
+    totalClean: number;
+    totalDirty: number;
+    totalWashing: number;
+    totalInRooms: number;
+    totalLinens: number;
+    totalRooms: number;
+}
+
+interface LowStockRoom {
+    id: number;
+    room: { id: number; name: string };
+    linen: { id: number; name: string };
+    current_qty: number;
+    par_stock: number;
+}
+
+interface RecentTransaction {
+    id: number;
+    trx_code: string;
+    type: string;
+    trx_date: string;
+    created_at: string;
+    room?: { id: number; name: string };
+    user?: { id: number; name: string };
+}
+
+interface MonthlyTransactions {
+    [key: string]: number;
+}
 
 export default function ManagerDashboard() {
-    const { auth } = usePage().props as any;
+    const {
+        auth,
+        stats,
+        lowStockRooms,
+        recentTransactions,
+        monthlyTransactions,
+        chartData: chartDataProp,
+    } = usePage().props as any;
+
+    // State for chart period selection
+    const [chartPeriod, setChartPeriod] = useState<
+        "last7Days" | "last30Days" | "thisMonth"
+    >("last7Days");
+
+    // Get current chart data based on period
+    const currentChartData = chartDataProp?.[chartPeriod] || [];
+    const currentTotal = chartDataProp?.totals?.[chartPeriod] || 0;
+
+    // Period labels
+    const periodLabels = {
+        last7Days: { label: "Last 7 Days", description: "7 hari terakhir" },
+        last30Days: {
+            label: "Last 30 Days",
+            description: "30 hari terakhir (per minggu)",
+        },
+        thisMonth: { label: "This Month", description: "Bulan ini (per hari)" },
+    };
+
+    const getTypeLabel = (type: string) => {
+        const labels: { [key: string]: string } = {
+            OUT_DISTRIBUTION: "Distribusi Bersih",
+            IN_COLLECTION: "Penerimaan Kotor",
+            WASH_START: "Mulai Cuci",
+            WASH_FINISH: "Selesai Cuci",
+            ADJUSTMENT: "Penyesuaian",
+            DISPOSAL: "Afkir",
+        };
+        return labels[type] || type;
+    };
+
+    const getTypeIcon = (type: string) => {
+        switch (type) {
+            case "OUT_DISTRIBUTION":
+                return <Check className="w-4 h-4" />;
+            case "IN_COLLECTION":
+                return <Archive className="w-4 h-4" />;
+            case "WASH_START":
+            case "WASH_FINISH":
+                return <WashingMachine className="w-4 h-4" />;
+            default:
+                return <Archive className="w-4 h-4" />;
+        }
+    };
+
+    const getTypeColor = (type: string) => {
+        switch (type) {
+            case "OUT_DISTRIBUTION":
+                return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600";
+            case "IN_COLLECTION":
+                return "bg-amber-100 dark:bg-amber-900/30 text-amber-600";
+            case "WASH_START":
+            case "WASH_FINISH":
+                return "bg-blue-100 dark:bg-blue-900/30 text-blue-600";
+            default:
+                return "bg-slate-100 dark:bg-slate-800 text-slate-600";
+        }
+    };
+
+    const formatTime = (dateString: string) => {
+        return new Date(dateString).toLocaleTimeString("id-ID", {
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    };
 
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden bg-gray-50 dark:bg-[#21242c] font-display animate-in fade-in duration-500">
@@ -105,7 +198,7 @@ export default function ManagerDashboard() {
                         Linen Bersih
                     </p>
                     <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-1">
-                        2,450
+                        {stats?.totalClean?.toLocaleString() || "0"}
                     </h3>
                     <p className="text-slate-400 text-xs mt-2">
                         Ready for distribution
@@ -127,7 +220,7 @@ export default function ManagerDashboard() {
                         Linen Kotor
                     </p>
                     <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-1">
-                        850
+                        {stats?.totalDirty?.toLocaleString() || "0"}
                     </h3>
                     <p className="text-slate-400 text-xs mt-2">
                         Pending collection
@@ -149,7 +242,7 @@ export default function ManagerDashboard() {
                         Proses Cuci
                     </p>
                     <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-1">
-                        1,200
+                        {stats?.totalWashing?.toLocaleString() || "0"}
                     </h3>
                     <p className="text-slate-400 text-xs mt-2">
                         Currently in machines
@@ -172,7 +265,7 @@ export default function ManagerDashboard() {
                         Stok Kritis (Par Level)
                     </p>
                     <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-1 relative z-10">
-                        12 Items
+                        {lowStockRooms?.length || 0} Items
                     </h3>
                     <p className="text-red-500 text-xs mt-2 font-medium relative z-10">
                         Requires immediate attention
@@ -185,18 +278,26 @@ export default function ManagerDashboard() {
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                     <div>
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                            Trend Distribusi Mingguan
+                            Trend Distribusi{" "}
+                            {periodLabels[chartPeriod].description}
                         </h3>
                         <p className="text-sm text-slate-500">
-                            Total 15,400 Pcs didistribusikan dalam 7 hari
-                            terakhir.
+                            Total {currentTotal.toLocaleString()} Pcs
+                            didistribusikan pada{" "}
+                            {periodLabels[chartPeriod].description}.
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
-                        <select className="text-sm border-slate-200 dark:border-slate-700 dark:bg-[#2b303b] dark:text-white rounded-lg focus:ring-[#298fa3] focus:border-[#298fa3]">
-                            <option>Last 7 Days</option>
-                            <option>Last 30 Days</option>
-                            <option>This Month</option>
+                        <select
+                            className="text-sm border-slate-200 dark:border-slate-700 dark:bg-[#2b303b] dark:text-white rounded-lg focus:ring-[#298fa3] focus:border-[#298fa3]"
+                            value={chartPeriod}
+                            onChange={(e) =>
+                                setChartPeriod(e.target.value as any)
+                            }
+                        >
+                            <option value="last7Days">Last 7 Days</option>
+                            <option value="last30Days">Last 30 Days</option>
+                            <option value="thisMonth">This Month</option>
                         </select>
                     </div>
                 </div>
@@ -204,7 +305,7 @@ export default function ManagerDashboard() {
                 <div className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
-                            data={data}
+                            data={currentChartData}
                             margin={{ top: 10, right: 0, left: 0, bottom: 0 }}
                         >
                             <defs>
@@ -297,66 +398,60 @@ export default function ManagerDashboard() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">
-                                        Sprei Pasien Putih
-                                    </td>
-                                    <td className="px-6 py-4">Gudang Utama</td>
-                                    <td className="px-6 py-4 text-red-600 font-bold">
-                                        120
-                                    </td>
-                                    <td className="px-6 py-4">250</td>
-                                    <td className="px-6 py-4">
-                                        <span className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs px-2 py-1 rounded-md font-medium">
-                                            Critical
-                                        </span>
-                                    </td>
-                                </tr>
-                                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">
-                                        Selimut Wool
-                                    </td>
-                                    <td className="px-6 py-4">Ruang VIP</td>
-                                    <td className="px-6 py-4 text-amber-600 font-bold">
-                                        15
-                                    </td>
-                                    <td className="px-6 py-4">20</td>
-                                    <td className="px-6 py-4">
-                                        <span className="bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-xs px-2 py-1 rounded-md font-medium">
-                                            Low
-                                        </span>
-                                    </td>
-                                </tr>
-                                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">
-                                        Baju Operasi Hijau
-                                    </td>
-                                    <td className="px-6 py-4">Unit OK</td>
-                                    <td className="px-6 py-4 text-red-600 font-bold">
-                                        45
-                                    </td>
-                                    <td className="px-6 py-4">100</td>
-                                    <td className="px-6 py-4">
-                                        <span className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs px-2 py-1 rounded-md font-medium">
-                                            Critical
-                                        </span>
-                                    </td>
-                                </tr>
-                                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">
-                                        Sarung Bantal
-                                    </td>
-                                    <td className="px-6 py-4">Gudang Utama</td>
-                                    <td className="px-6 py-4 text-amber-600 font-bold">
-                                        88
-                                    </td>
-                                    <td className="px-6 py-4">100</td>
-                                    <td className="px-6 py-4">
-                                        <span className="bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-xs px-2 py-1 rounded-md font-medium">
-                                            Low
-                                        </span>
-                                    </td>
-                                </tr>
+                                {lowStockRooms && lowStockRooms.length > 0 ? (
+                                    lowStockRooms
+                                        .slice(0, 5)
+                                        .map((item: any) => {
+                                            const ratio =
+                                                item.current_qty /
+                                                item.par_stock;
+                                            const isCritical = ratio < 0.5;
+                                            return (
+                                                <tr
+                                                    key={item.id}
+                                                    className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                                                >
+                                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">
+                                                        {item.linen?.name ||
+                                                            "-"}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        {item.room?.name || "-"}
+                                                    </td>
+                                                    <td
+                                                        className={`px-6 py-4 font-bold ${isCritical ? "text-red-600" : "text-amber-600"}`}
+                                                    >
+                                                        {item.current_qty}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        {item.par_stock}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span
+                                                            className={`text-xs px-2 py-1 rounded-md font-medium ${
+                                                                isCritical
+                                                                    ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
+                                                                    : "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400"
+                                                            }`}
+                                                        >
+                                                            {isCritical
+                                                                ? "Critical"
+                                                                : "Low"}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                ) : (
+                                    <tr>
+                                        <td
+                                            colSpan={5}
+                                            className="px-6 py-8 text-center text-slate-500"
+                                        >
+                                            Tidak ada stok kritis saat ini
+                                        </td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -373,69 +468,54 @@ export default function ManagerDashboard() {
                         </button>
                     </div>
                     <div className="space-y-6 flex-1">
-                        {/* Item 1 */}
-                        <div className="flex gap-4">
-                            <div className="relative mt-1">
-                                <div className="size-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 z-10 relative">
-                                    <Check className="w-4 h-4" />
-                                </div>
-                                <div className="absolute top-8 left-1/2 -translate-x-1/2 w-0.5 h-full bg-slate-100 dark:bg-slate-800 -z-0"></div>
+                        {recentTransactions && recentTransactions.length > 0 ? (
+                            recentTransactions
+                                .slice(0, 5)
+                                .map((trx: any, index: number) => (
+                                    <div className="flex gap-4" key={trx.id}>
+                                        <div className="relative mt-1">
+                                            <div
+                                                className={`size-8 rounded-full flex items-center justify-center z-10 relative ${getTypeColor(trx.type)}`}
+                                            >
+                                                {getTypeIcon(trx.type)}
+                                            </div>
+                                            {index <
+                                                Math.min(
+                                                    recentTransactions.length -
+                                                        1,
+                                                    4,
+                                                ) && (
+                                                <div className="absolute top-8 left-1/2 -translate-x-1/2 w-0.5 h-full bg-slate-100 dark:bg-slate-800 -z-0"></div>
+                                            )}
+                                        </div>
+                                        <div className="flex-1 pb-2">
+                                            <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                                                {getTypeLabel(trx.type)}{" "}
+                                                {trx.room
+                                                    ? `ke ${trx.room.name}`
+                                                    : ""}
+                                            </p>
+                                            <p className="text-xs text-slate-500 mt-0.5">
+                                                {trx.trx_code} •{" "}
+                                                {trx.user?.name || "System"}
+                                            </p>
+                                            <span className="text-[10px] font-medium text-slate-400 mt-2 block">
+                                                {formatTime(trx.created_at)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))
+                        ) : (
+                            <div className="text-center py-8 text-slate-500">
+                                Belum ada transaksi hari ini
                             </div>
-                            <div className="flex-1 pb-2">
-                                <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                                    Distribusi Bersih ke ICU
-                                </p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                    250 items accepted by Sr. Nurse Ani
-                                </p>
-                                <span className="text-[10px] font-medium text-slate-400 mt-2 block">
-                                    10:45 AM
-                                </span>
-                            </div>
-                        </div>
-                        {/* Item 2 */}
-                        <div className="flex gap-4">
-                            <div className="relative mt-1">
-                                <div className="size-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 z-10 relative">
-                                    <WashingMachine className="w-4 h-4" />
-                                </div>
-                                <div className="absolute top-8 left-1/2 -translate-x-1/2 w-0.5 h-full bg-slate-100 dark:bg-slate-800 -z-0"></div>
-                            </div>
-                            <div className="flex-1 pb-2">
-                                <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                                    Mulai Siklus Cuci #402
-                                </p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                    Mesin A & C • 150kg Load
-                                </p>
-                                <span className="text-[10px] font-medium text-slate-400 mt-2 block">
-                                    09:30 AM
-                                </span>
-                            </div>
-                        </div>
-                        {/* Item 3 */}
-                        <div className="flex gap-4">
-                            <div className="relative mt-1">
-                                <div className="size-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 z-10 relative">
-                                    <Archive className="w-4 h-4" />
-                                </div>
-                            </div>
-                            <div className="flex-1 pb-2">
-                                <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                                    Penerimaan Linen Kotor
-                                </p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                    Dari Ruang Rawat Inap Lt.3
-                                </p>
-                                <span className="text-[10px] font-medium text-slate-400 mt-2 block">
-                                    08:15 AM
-                                </span>
-                            </div>
-                        </div>
+                        )}
                     </div>
-                    <button className="w-full mt-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                        View Full Log
-                    </button>
+                    <Link href={route("laporan.transaksi")}>
+                        <button className="w-full mt-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                            View Full Log
+                        </button>
+                    </Link>
                 </div>
             </div>
         </div>

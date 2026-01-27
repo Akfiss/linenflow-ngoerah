@@ -411,4 +411,153 @@ class ReportController extends Controller
 
         return response()->stream($callback, 200, $headers);
     }
+
+    /**
+     * Display lost and found analysis (Analisa Kehilangan).
+     */
+    public function lostAndFound(Request $request): Response
+    {
+        // Get date range - default to current month
+        $dateFrom = $request->get('date_from', now()->startOfMonth()->toDateString());
+        $dateTo = $request->get('date_to', now()->toDateString());
+        $roomId = $request->get('room');
+
+        // Get all rooms
+        $rooms = Room::orderBy('name')->get();
+
+        // Build query for distributed linen (OUT_DISTRIBUTION)
+        $distributedQuery = Transaction::where('type', Transaction::TYPE_OUT_DISTRIBUTION)
+            ->whereDate('trx_date', '>=', $dateFrom)
+            ->whereDate('trx_date', '<=', $dateTo);
+
+        // Build query for returned linen (IN_COLLECTION)
+        $returnedQuery = Transaction::where('type', Transaction::TYPE_IN_COLLECTION)
+            ->whereDate('trx_date', '>=', $dateFrom)
+            ->whereDate('trx_date', '<=', $dateTo);
+
+        if ($roomId) {
+            $distributedQuery->where('room_id', $roomId);
+            $returnedQuery->where('room_id', $roomId);
+        }
+
+        // Get distributed amounts per room
+        $distributedData = $distributedQuery
+            ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
+            ->selectRaw('room_id, SUM(transaction_details.qty) as total_distributed')
+            ->groupBy('room_id')
+            ->pluck('total_distributed', 'room_id');
+
+        // Get returned amounts per room
+        $returnedData = $returnedQuery
+            ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
+            ->selectRaw('room_id, SUM(transaction_details.qty) as total_returned')
+            ->groupBy('room_id')
+            ->pluck('total_returned', 'room_id');
+
+        // Calculate discrepancies per room
+        $analysisData = [];
+        $totalDistributed = 0;
+        $totalReturned = 0;
+        $totalDiscrepancy = 0;
+
+        foreach ($rooms as $room) {
+            $distributed = $distributedData[$room->id] ?? 0;
+            $returned = $returnedData[$room->id] ?? 0;
+            
+            // Get current room stock
+            $currentStock = RoomStock::where('room_id', $room->id)->sum('current_qty');
+            
+            // Discrepancy = Distributed - Returned - Current Stock in Room
+            $discrepancy = $distributed - $returned - $currentStock;
+            
+            // Only include if there's activity
+            if ($distributed > 0 || $returned > 0) {
+                $analysisData[] = [
+                    'room' => [
+                        'id' => $room->id,
+                        'name' => $room->name,
+                        'type' => $room->type,
+                    ],
+                    'distributed' => $distributed,
+                    'returned' => $returned,
+                    'current_stock' => $currentStock,
+                    'discrepancy' => $discrepancy,
+                    'has_anomaly' => $discrepancy > 0,
+                ];
+                
+                $totalDistributed += $distributed;
+                $totalReturned += $returned;
+                $totalDiscrepancy += max(0, $discrepancy);
+            }
+        }
+
+        // Sort by discrepancy (highest first)
+        usort($analysisData, function ($a, $b) {
+            return $b['discrepancy'] <=> $a['discrepancy'];
+        });
+
+        // Get detailed loss by linen type if specific room is selected
+        $linenBreakdown = [];
+        if ($roomId) {
+            // Distributed per linen
+            $distributedByLinen = Transaction::where('type', Transaction::TYPE_OUT_DISTRIBUTION)
+                ->where('room_id', $roomId)
+                ->whereDate('trx_date', '>=', $dateFrom)
+                ->whereDate('trx_date', '<=', $dateTo)
+                ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
+                ->join('linens', 'transaction_details.linen_id', '=', 'linens.id')
+                ->selectRaw('linens.id as linen_id, linens.name as linen_name, linens.sku_code, SUM(transaction_details.qty) as distributed')
+                ->groupBy('linens.id', 'linens.name', 'linens.sku_code')
+                ->get()
+                ->keyBy('linen_id');
+
+            // Returned per linen
+            $returnedByLinen = Transaction::where('type', Transaction::TYPE_IN_COLLECTION)
+                ->where('room_id', $roomId)
+                ->whereDate('trx_date', '>=', $dateFrom)
+                ->whereDate('trx_date', '<=', $dateTo)
+                ->join('transaction_details', 'transactions.id', '=', 'transaction_details.transaction_id')
+                ->selectRaw('linen_id, SUM(transaction_details.qty) as returned')
+                ->groupBy('linen_id')
+                ->pluck('returned', 'linen_id');
+
+            // Room stock per linen
+            $roomStockByLinen = RoomStock::where('room_id', $roomId)
+                ->pluck('current_qty', 'linen_id');
+
+            foreach ($distributedByLinen as $linenId => $data) {
+                $returned = $returnedByLinen[$linenId] ?? 0;
+                $roomStock = $roomStockByLinen[$linenId] ?? 0;
+                $discrepancy = $data->distributed - $returned - $roomStock;
+
+                $linenBreakdown[] = [
+                    'linen_id' => $linenId,
+                    'linen_name' => $data->linen_name,
+                    'sku_code' => $data->sku_code,
+                    'distributed' => $data->distributed,
+                    'returned' => $returned,
+                    'room_stock' => $roomStock,
+                    'discrepancy' => $discrepancy,
+                ];
+            }
+        }
+
+        return Inertia::render('Laporan/Kehilangan/Index', [
+            'analysisData' => $analysisData,
+            'linenBreakdown' => $linenBreakdown,
+            'summary' => [
+                'totalDistributed' => $totalDistributed,
+                'totalReturned' => $totalReturned,
+                'totalDiscrepancy' => $totalDiscrepancy,
+                'roomsWithAnomalies' => count(array_filter($analysisData, fn($a) => $a['has_anomaly'])),
+            ],
+            'rooms' => $rooms,
+            'filters' => [
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+                'room' => $roomId,
+            ],
+        ]);
+    }
 }
+

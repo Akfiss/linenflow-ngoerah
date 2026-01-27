@@ -134,9 +134,9 @@ export const menuConfig: MenuGroup[] = [
             },
             {
                 title: "Riwayat Ruangan",
-                href: "/inventaris/riwayat-ruangan",
+                href: "/ruangan/riwayat",
                 icon: History,
-                permission: "view_nurse_dashboard",
+                permission: "confirm_receipt",
             },
         ],
     },
@@ -176,13 +176,13 @@ export const menuConfig: MenuGroup[] = [
             },
             {
                 title: "Data Ruangan",
-                href: "/master/ruangan",
+                href: "/master/room",
                 icon: MapPin,
                 permission: "manage_master_data",
             },
             {
                 title: "Kategori",
-                href: "/master/kategori",
+                href: "/master/categories",
                 icon: Tags,
                 permission: "manage_master_data",
             },
@@ -214,7 +214,7 @@ export function getFilteredMenu(permissions: string[]): MenuGroup[] {
         .map((group) => ({
             ...group,
             items: group.items.filter((item) =>
-                permissions.includes(item.permission)
+                permissions.includes(item.permission),
             ),
         }))
         .filter((group) => group.items.length > 0);

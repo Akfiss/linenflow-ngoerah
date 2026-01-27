@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\CollectionController;
+use App\Http\Controllers\ConfirmationController;
 use App\Http\Controllers\DashboardController;
+
 use App\Http\Controllers\DisposalController;
 use App\Http\Controllers\DistributionController;
 use App\Http\Controllers\LinenCategoryController;
@@ -10,8 +12,12 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RoomController;
+use App\Http\Controllers\RoomHistoryController;
+use App\Http\Controllers\StockOpnameController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WashingController;
+
+
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -77,6 +83,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/history', [CollectionController::class, 'history'])->name('history');
     });
 
+    // Konfirmasi Terima (Head Nurse)
+    Route::prefix('sirkulasi/konfirmasi')->name('confirmation.')->middleware('permission:confirm_receipt')->group(function () {
+        Route::get('/', [ConfirmationController::class, 'index'])->name('index');
+        Route::post('/{transaction}', [ConfirmationController::class, 'confirm'])->name('confirm');
+        Route::get('/history', [ConfirmationController::class, 'history'])->name('history');
+    });
+
+    // Riwayat Ruangan (Head Nurse)
+    Route::prefix('ruangan/riwayat')->name('nurse.riwayat')->middleware('permission:confirm_receipt')->group(function () {
+        Route::get('/', [RoomHistoryController::class, 'index']);
+        Route::get('/{transaction}', [RoomHistoryController::class, 'show'])->name('.show');
+    });
+
+
     /*
     |--------------------------------------------------------------------------
     | Produksi Routes
@@ -114,7 +134,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/ruangan', [ReportController::class, 'roomStock'])
             ->name('ruangan')
             ->middleware('permission:view_all_stats');
+        
+        // Stock Opname
+        Route::get('/opname', [StockOpnameController::class, 'index'])
+            ->name('opname')
+            ->middleware('permission:create_adjustment');
+        Route::post('/opname', [StockOpnameController::class, 'store'])
+            ->name('opname.store')
+            ->middleware('permission:create_adjustment');
+        Route::get('/opname/history', [StockOpnameController::class, 'history'])
+            ->name('opname.history')
+            ->middleware('permission:create_adjustment');
     });
+
 
     /*
     |--------------------------------------------------------------------------
@@ -129,10 +161,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/transaksi/export', [ReportController::class, 'exportTransactions'])
             ->name('transaksi.export')
             ->middleware('permission:view_global_report');
+        Route::get('/kehilangan', [ReportController::class, 'lostAndFound'])
+            ->name('kehilangan')
+            ->middleware('permission:view_financial_reports');
         Route::get('/kinerja', [ReportController::class, 'performance'])
             ->name('kinerja')
             ->middleware('permission:view_global_report');
     });
+
 
     /*
     |--------------------------------------------------------------------------

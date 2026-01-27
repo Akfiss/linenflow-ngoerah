@@ -41,6 +41,12 @@ class HandleInertiaRequests extends Middleware
             'system' => [], // Fallback
         ];
 
+        // Get primary role from Spatie (preferred) or fallback to role column
+        $primaryRole = null;
+        if ($user) {
+            $primaryRole = $user->roles->first()?->name ?? $user->role;
+        }
+
         return [
             ...parent::share($request),
             'auth' => [
@@ -48,11 +54,11 @@ class HandleInertiaRequests extends Middleware
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
-                    'role' => $user->role,
+                    'role' => $primaryRole,
                     'room_id' => $user->room_id,
                 ] : null,
-                'permissions' => $user ? array_merge($user->getAllPermissions()->pluck('name')->toArray(), $permissionsMap[$user->role] ?? []) : [],
-                'roles' => $user ? [$user->role] : [],
+                'permissions' => $user ? array_merge($user->getAllPermissions()->pluck('name')->toArray(), $permissionsMap[$primaryRole] ?? []) : [],
+                'roles' => $user ? ($primaryRole ? [$primaryRole] : []) : [],
             ],
             'ziggy' => fn () => [
                 ...(new Ziggy)->toArray(),

@@ -11,6 +11,14 @@ import {
     SelectValue,
 } from "@/Components/ui/select";
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/Components/ui/dialog";
+import { Badge } from "@/Components/ui/badge";
+import {
     FileText,
     Search,
     Download,
@@ -22,6 +30,10 @@ import {
     ArrowUpDown,
     ArrowUp,
     ArrowDown,
+    Eye,
+    CheckCircle,
+    Clock,
+    Package,
 } from "lucide-react";
 
 interface User {
@@ -37,6 +49,7 @@ interface Room {
 interface Linen {
     id: number;
     name: string;
+    sku_code: string;
 }
 
 interface TransactionDetail {
@@ -49,11 +62,15 @@ interface Transaction {
     id: number;
     trx_code: string;
     trx_date: string;
+    created_at: string;
     type: string;
+    status: string;
     notes: string | null;
+    confirmed_at: string | null;
     user: User | null;
     room: Room | null;
     details: TransactionDetail[];
+    confirmed_by_user?: User | null;
 }
 
 interface PaginatedTransactions {
@@ -89,6 +106,8 @@ export default function LogTransaksi({
     filters,
 }: Props) {
     const [showFilters, setShowFilters] = useState(false);
+    const [selectedTransaction, setSelectedTransaction] =
+        useState<Transaction | null>(null);
     const [localFilters, setLocalFilters] = useState({
         type: filters?.type || "",
         room: filters?.room || "",
@@ -184,12 +203,14 @@ export default function LogTransaksi({
         }
     };
 
-    const formatDate = (dateString: string) => {
+    const formatDateTime = (dateString: string) => {
         const date = new Date(dateString);
         return date.toLocaleDateString("id-ID", {
             day: "2-digit",
             month: "short",
             year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
         });
     };
 
@@ -203,6 +224,39 @@ export default function LogTransaksi({
             DISPOSAL: "bg-red-100 text-red-700 border-red-200",
         };
         return colors[type] || "bg-slate-100 text-slate-700 border-slate-200";
+    };
+
+    const getStatusBadge = (status: string, type: string) => {
+        // Only OUT_DISTRIBUTION needs confirmation
+        if (type !== "OUT_DISTRIBUTION") {
+            return (
+                <Badge
+                    variant="secondary"
+                    className="bg-slate-100 text-slate-600"
+                >
+                    -
+                </Badge>
+            );
+        }
+
+        if (status === "confirmed") {
+            return (
+                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 gap-1">
+                    <CheckCircle className="h-3 w-3" />
+                    Dikonfirmasi
+                </Badge>
+            );
+        }
+        return (
+            <Badge className="bg-amber-100 text-amber-700 border-amber-200 gap-1">
+                <Clock className="h-3 w-3" />
+                Pending
+            </Badge>
+        );
+    };
+
+    const getTotalQty = (details: TransactionDetail[]) => {
+        return details?.reduce((sum, d) => sum + d.qty, 0) || 0;
     };
 
     return (
@@ -404,11 +458,11 @@ export default function LogTransaksi({
                                     </th>
                                     <th
                                         className="p-4 cursor-pointer hover:bg-slate-100"
-                                        onClick={() => handleSort("trx_date")}
+                                        onClick={() => handleSort("created_at")}
                                     >
                                         <div className="flex items-center">
-                                            Tanggal
-                                            <SortIcon field="trx_date" />
+                                            Waktu
+                                            <SortIcon field="created_at" />
                                         </div>
                                     </th>
                                     <th
@@ -420,26 +474,12 @@ export default function LogTransaksi({
                                             <SortIcon field="type" />
                                         </div>
                                     </th>
-                                    <th
-                                        className="p-4 cursor-pointer hover:bg-slate-100"
-                                        onClick={() => handleSort("room_name")}
-                                    >
-                                        <div className="flex items-center">
-                                            Ruangan
-                                            <SortIcon field="room_name" />
-                                        </div>
+                                    <th className="p-4">Ruangan</th>
+                                    <th className="p-4">User</th>
+                                    <th className="p-4">Status</th>
+                                    <th className="p-4 pr-6 text-center">
+                                        Aksi
                                     </th>
-                                    <th
-                                        className="p-4 cursor-pointer hover:bg-slate-100"
-                                        onClick={() => handleSort("user_name")}
-                                    >
-                                        <div className="flex items-center">
-                                            User
-                                            <SortIcon field="user_name" />
-                                        </div>
-                                    </th>
-                                    <th className="p-4">Item</th>
-                                    <th className="p-4 pr-6">Catatan</th>
                                 </tr>
                             </thead>
                             <tbody className="text-sm divide-y divide-slate-200">
@@ -462,7 +502,7 @@ export default function LogTransaksi({
                                                 {trx.trx_code}
                                             </td>
                                             <td className="p-4 text-slate-600">
-                                                {formatDate(trx.trx_date)}
+                                                {formatDateTime(trx.created_at)}
                                             </td>
                                             <td className="p-4">
                                                 <span
@@ -479,13 +519,26 @@ export default function LogTransaksi({
                                             <td className="p-4 text-slate-600">
                                                 {trx.user?.name || "-"}
                                             </td>
-                                            <td className="p-4 text-slate-600">
-                                                {trx.details?.length > 0
-                                                    ? `${trx.details.length} item`
-                                                    : "-"}
+                                            <td className="p-4">
+                                                {getStatusBadge(
+                                                    trx.status,
+                                                    trx.type,
+                                                )}
                                             </td>
-                                            <td className="p-4 pr-6 text-slate-500 max-w-[200px] truncate">
-                                                {trx.notes || "-"}
+                                            <td className="p-4 pr-6 text-center">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        setSelectedTransaction(
+                                                            trx,
+                                                        )
+                                                    }
+                                                    className="gap-1"
+                                                >
+                                                    <Eye className="h-4 w-4" />
+                                                    Detail
+                                                </Button>
                                             </td>
                                         </tr>
                                     ))
@@ -542,6 +595,156 @@ export default function LogTransaksi({
                     </div>
                 </div>
             </div>
+
+            {/* Detail Modal */}
+            <Dialog
+                open={!!selectedTransaction}
+                onOpenChange={() => setSelectedTransaction(null)}
+            >
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Package className="h-5 w-5" />
+                            Detail Transaksi
+                        </DialogTitle>
+                        <DialogDescription>
+                            {selectedTransaction?.trx_code}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {selectedTransaction && (
+                        <div className="space-y-4">
+                            {/* Transaction Info */}
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <p className="text-slate-500">Waktu</p>
+                                    <p className="font-medium">
+                                        {formatDateTime(
+                                            selectedTransaction.created_at,
+                                        )}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-slate-500">Tipe</p>
+                                    <span
+                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${getTypeBadge(selectedTransaction.type)}`}
+                                    >
+                                        {types?.[selectedTransaction.type] ||
+                                            selectedTransaction.type}
+                                    </span>
+                                </div>
+                                <div>
+                                    <p className="text-slate-500">Ruangan</p>
+                                    <p className="font-medium">
+                                        {selectedTransaction.room?.name || "-"}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-slate-500">Operator</p>
+                                    <p className="font-medium">
+                                        {selectedTransaction.user?.name || "-"}
+                                    </p>
+                                </div>
+                                {selectedTransaction.type ===
+                                    "OUT_DISTRIBUTION" && (
+                                    <>
+                                        <div>
+                                            <p className="text-slate-500">
+                                                Status
+                                            </p>
+                                            {getStatusBadge(
+                                                selectedTransaction.status,
+                                                selectedTransaction.type,
+                                            )}
+                                        </div>
+                                        {selectedTransaction.confirmed_at && (
+                                            <div>
+                                                <p className="text-slate-500">
+                                                    Dikonfirmasi
+                                                </p>
+                                                <p className="font-medium text-xs">
+                                                    {formatDateTime(
+                                                        selectedTransaction.confirmed_at,
+                                                    )}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Items */}
+                            <div>
+                                <p className="text-sm text-slate-500 mb-2">
+                                    Item (
+                                    {getTotalQty(selectedTransaction.details)}{" "}
+                                    pcs)
+                                </p>
+                                <div className="border rounded-lg overflow-hidden">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-50">
+                                            <tr>
+                                                <th className="p-2 pl-3 text-left text-xs text-slate-500 font-medium">
+                                                    SKU
+                                                </th>
+                                                <th className="p-2 text-left text-xs text-slate-500 font-medium">
+                                                    Nama
+                                                </th>
+                                                <th className="p-2 pr-3 text-right text-xs text-slate-500 font-medium">
+                                                    Qty
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {selectedTransaction.details?.map(
+                                                (detail) => (
+                                                    <tr key={detail.id}>
+                                                        <td className="p-2 pl-3 font-mono text-xs text-slate-600">
+                                                            {detail.linen
+                                                                ?.sku_code ||
+                                                                "-"}
+                                                        </td>
+                                                        <td className="p-2 text-slate-700">
+                                                            {detail.linen?.name}
+                                                        </td>
+                                                        <td className="p-2 pr-3 text-right font-bold">
+                                                            {detail.qty}
+                                                        </td>
+                                                    </tr>
+                                                ),
+                                            )}
+                                            {(!selectedTransaction.details ||
+                                                selectedTransaction.details
+                                                    .length === 0) && (
+                                                <tr>
+                                                    <td
+                                                        colSpan={3}
+                                                        className="p-4 text-center text-slate-400"
+                                                    >
+                                                        Tidak ada item
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* Notes */}
+                            {selectedTransaction.notes && (
+                                <div>
+                                    <p className="text-sm text-slate-500 mb-1">
+                                        Catatan
+                                    </p>
+                                    <p className="text-sm bg-slate-50 p-3 rounded-lg">
+                                        {selectedTransaction.notes}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </AuthenticatedLayout>
     );
 }

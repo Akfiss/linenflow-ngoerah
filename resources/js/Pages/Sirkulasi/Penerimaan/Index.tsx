@@ -1,6 +1,6 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head, router } from "@inertiajs/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
 import { Textarea } from "@/Components/ui/textarea";
@@ -11,6 +11,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/Components/ui/select";
+import { Label } from "@/Components/ui/label";
 import {
     Card,
     CardContent,
@@ -18,8 +19,23 @@ import {
     CardHeader,
     CardTitle,
 } from "@/Components/ui/card";
-import { Badge } from "@/Components/ui/badge";
-import { Send, Plus, Trash2, Building2, Package, History } from "lucide-react";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/Components/ui/table";
+import {
+    PackageOpen,
+    Plus,
+    Trash2,
+    Building2,
+    Package,
+    Send,
+    History,
+} from "lucide-react";
 import { Link } from "@inertiajs/react";
 
 // Types
@@ -29,24 +45,23 @@ interface Room {
     type: string;
 }
 
-interface LinenCategory {
-    id: number;
-    name: string;
+interface CentralStock {
+    clean_qty: number;
+    dirty_qty: number;
+    washing_qty: number;
 }
 
 interface Linen {
     id: number;
     name: string;
     sku_code: string;
-    category?: LinenCategory;
+    central_stock?: CentralStock;
 }
 
-interface CentralStock {
+interface RoomStock {
     id: number;
     linen_id: number;
-    clean_qty: number;
-    dirty_qty: number;
-    washing_qty: number;
+    current_qty: number;
     linen: Linen;
 }
 
@@ -57,14 +72,35 @@ interface LineItem {
 
 interface Props {
     rooms: Room[];
-    stocks: CentralStock[];
+    linens: Linen[];
 }
 
-export default function DistribusiIndex({ rooms, stocks }: Props) {
+export default function PenerimaanIndex({ rooms, linens }: Props) {
     const [selectedRoom, setSelectedRoom] = useState<string>("");
+    const [roomStocks, setRoomStocks] = useState<RoomStock[]>([]);
     const [items, setItems] = useState<LineItem[]>([{ linen_id: "", qty: 1 }]);
     const [notes, setNotes] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Fetch room stock when room is selected
+    useEffect(() => {
+        if (selectedRoom) {
+            setIsLoading(true);
+            fetch(route("collection.room.stock", selectedRoom))
+                .then((res) => res.json())
+                .then((data) => {
+                    setRoomStocks(data.stocks || []);
+                    setIsLoading(false);
+                })
+                .catch(() => {
+                    setRoomStocks([]);
+                    setIsLoading(false);
+                });
+        } else {
+            setRoomStocks([]);
+        }
+    }, [selectedRoom]);
 
     const addItem = () => {
         setItems([...items, { linen_id: "", qty: 1 }]);
@@ -87,13 +123,8 @@ export default function DistribusiIndex({ rooms, stocks }: Props) {
     };
 
     const getMaxQty = (linenId: string): number => {
-        const stock = stocks.find((s) => String(s.linen_id) === linenId);
-        return stock?.clean_qty || 0;
-    };
-
-    const getLinenName = (linenId: string): string => {
-        const stock = stocks.find((s) => String(s.linen_id) === linenId);
-        return stock?.linen.name || "";
+        const stock = roomStocks.find((s) => String(s.linen_id) === linenId);
+        return stock?.current_qty || 0;
     };
 
     const handleSubmit = () => {
@@ -108,7 +139,7 @@ export default function DistribusiIndex({ rooms, stocks }: Props) {
         setIsSubmitting(true);
 
         router.post(
-            route("distribution.store"),
+            route("collection.store"),
             {
                 room_id: selectedRoom,
                 items: validItems.map((item) => ({
@@ -132,32 +163,22 @@ export default function DistribusiIndex({ rooms, stocks }: Props) {
         return items.reduce((acc, item) => acc + (item.qty || 0), 0);
     };
 
-    const totalCleanStock = stocks.reduce((acc, s) => acc + s.clean_qty, 0);
-
     return (
         <AuthenticatedLayout>
-            <Head title="Distribusi Bersih" />
+            <Head title="Penerimaan Kotor" />
 
             <div className="flex flex-col gap-8">
                 {/* Page Title */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex flex-col gap-1">
                         <h2 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                            <Send className="h-6 w-6 text-primary" />
-                            Distribusi Linen Bersih
+                            <PackageOpen className="h-6 w-6 text-primary" />
+                            Penerimaan Linen Kotor
                         </h2>
                         <p className="text-slate-500 text-sm">
-                            Catat pengiriman linen bersih ke ruangan.
+                            Catat linen kotor yang dikembalikan dari ruangan ke
+                            laundry.
                         </p>
-                    </div>
-                    <div className="flex gap-2">
-                        <Badge
-                            variant="secondary"
-                            className="text-sm py-1 px-3"
-                        >
-                            <Package className="h-4 w-4 mr-1" />
-                            Stok Bersih: {totalCleanStock} pcs
-                        </Badge>
                     </div>
                 </div>
 
@@ -169,11 +190,10 @@ export default function DistribusiIndex({ rooms, stocks }: Props) {
                             <CardHeader className="pb-4">
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <Building2 className="h-4 w-4" />
-                                    Pilih Ruangan Tujuan
+                                    Pilih Ruangan
                                 </CardTitle>
                                 <CardDescription>
-                                    Pilih ruangan yang akan menerima linen
-                                    bersih
+                                    Pilih ruangan asal linen kotor
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
@@ -203,10 +223,10 @@ export default function DistribusiIndex({ rooms, stocks }: Props) {
                             <CardHeader className="pb-4">
                                 <CardTitle className="text-base flex items-center gap-2">
                                     <Package className="h-4 w-4" />
-                                    Daftar Linen Bersih
+                                    Daftar Linen Kotor
                                 </CardTitle>
                                 <CardDescription>
-                                    Tambahkan item linen yang akan dikirim
+                                    Tambahkan item linen yang diterima
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
@@ -230,27 +250,22 @@ export default function DistribusiIndex({ rooms, stocks }: Props) {
                                                     <SelectValue placeholder="Pilih linen..." />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {stocks.map((stock) => (
+                                                    {linens.map((linen) => (
                                                         <SelectItem
-                                                            key={stock.linen_id}
+                                                            key={linen.id}
                                                             value={String(
-                                                                stock.linen_id,
+                                                                linen.id,
                                                             )}
                                                         >
-                                                            {
-                                                                stock.linen
-                                                                    .sku_code
-                                                            }{" "}
-                                                            - {stock.linen.name}
-                                                            ({stock.clean_qty}{" "}
-                                                            tersedia)
+                                                            {linen.sku_code} -{" "}
+                                                            {linen.name}
                                                         </SelectItem>
                                                     ))}
                                                 </SelectContent>
                                             </Select>
                                             {item.linen_id && (
                                                 <p className="text-xs text-slate-500 mt-1">
-                                                    Stok tersedia:{" "}
+                                                    Stok di ruangan:{" "}
                                                     {getMaxQty(item.linen_id)}{" "}
                                                     pcs
                                                 </p>
@@ -318,13 +333,13 @@ export default function DistribusiIndex({ rooms, stocks }: Props) {
                         <Card className="sticky top-4">
                             <CardHeader className="pb-4">
                                 <CardTitle className="text-base">
-                                    Ringkasan Distribusi
+                                    Ringkasan
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="flex justify-between text-sm">
                                     <span className="text-slate-500">
-                                        Ruangan Tujuan
+                                        Ruangan
                                     </span>
                                     <span className="font-medium">
                                         {selectedRoom
@@ -336,28 +351,16 @@ export default function DistribusiIndex({ rooms, stocks }: Props) {
                                             : "-"}
                                     </span>
                                 </div>
-
-                                <div className="space-y-2">
-                                    {items
-                                        .filter((i) => i.linen_id)
-                                        .map((item, index) => (
-                                            <div
-                                                key={index}
-                                                className="flex justify-between text-sm py-1 border-b last:border-0"
-                                            >
-                                                <span className="text-slate-600 truncate max-w-[60%]">
-                                                    {getLinenName(
-                                                        item.linen_id,
-                                                    )}
-                                                </span>
-                                                <span className="font-medium text-emerald-600">
-                                                    +{item.qty}
-                                                </span>
-                                            </div>
-                                        ))}
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-slate-500">
+                                        Jumlah Item
+                                    </span>
+                                    <span className="font-medium">
+                                        {items.filter((i) => i.linen_id).length}{" "}
+                                        jenis
+                                    </span>
                                 </div>
-
-                                <div className="flex justify-between pt-2 border-t">
+                                <div className="flex justify-between text-sm">
                                     <span className="text-slate-500">
                                         Total Qty
                                     </span>
@@ -382,42 +385,38 @@ export default function DistribusiIndex({ rooms, stocks }: Props) {
                                     <Send className="h-4 w-4" />
                                     {isSubmitting
                                         ? "Menyimpan..."
-                                        : "Kirim Linen"}
+                                        : "Simpan Transaksi"}
                                 </Button>
                             </CardContent>
                         </Card>
 
-                        {/* Available Clean Stock Preview */}
-                        <Card>
-                            <CardHeader className="pb-4">
-                                <CardTitle className="text-base">
-                                    Stok Bersih Tersedia
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-2 max-h-60 overflow-y-auto">
-                                    {stocks.map((stock) => (
-                                        <div
-                                            key={stock.id}
-                                            className="flex justify-between text-sm py-1 border-b last:border-0"
-                                        >
-                                            <span className="text-slate-600 truncate">
-                                                {stock.linen.name}
-                                            </span>
-                                            <Badge
-                                                variant={
-                                                    stock.clean_qty > 10
-                                                        ? "secondary"
-                                                        : "destructive"
-                                                }
+                        {/* Room Stock Preview */}
+                        {selectedRoom && roomStocks.length > 0 && (
+                            <Card>
+                                <CardHeader className="pb-4">
+                                    <CardTitle className="text-base">
+                                        Stok di Ruangan
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                                        {roomStocks.map((stock) => (
+                                            <div
+                                                key={stock.id}
+                                                className="flex justify-between text-sm py-1 border-b last:border-0"
                                             >
-                                                {stock.clean_qty}
-                                            </Badge>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
+                                                <span className="text-slate-600 truncate">
+                                                    {stock.linen.name}
+                                                </span>
+                                                <span className="font-medium">
+                                                    {stock.current_qty}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
                     </div>
                 </div>
             </div>
