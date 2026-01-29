@@ -3,7 +3,6 @@ import { Head, router } from "@inertiajs/react";
 import { useState } from "react";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
-import { Textarea } from "@/Components/ui/textarea";
 import { Checkbox } from "@/Components/ui/checkbox";
 import {
     Card,
@@ -28,6 +27,8 @@ import {
     History,
     Package,
     Loader2,
+    Search,
+    Clock,
 } from "lucide-react";
 import { Link } from "@inertiajs/react";
 
@@ -60,21 +61,55 @@ interface SelectedItem {
     name: string;
 }
 
-interface Props {
-    stocks: CentralStock[];
+interface WashLog {
+    id: number;
+    linen_id: number;
+    qty: number;
+    action: "start" | "finish";
+    logged_at: string;
+    linen: Linen;
+    user: { id: number; name: string };
 }
 
-export default function ProsesCuciIndex({ stocks }: Props) {
+interface Props {
+    stocks: CentralStock[];
+    washLogs: WashLog[];
+    filters: { search: string };
+}
+
+export default function ProsesCuciIndex({ stocks, washLogs, filters }: Props) {
     const [selectedDirty, setSelectedDirty] = useState<SelectedItem[]>([]);
     const [selectedWashing, setSelectedWashing] = useState<SelectedItem[]>([]);
-    const [notes, setNotes] = useState("");
+    const [dirtySearchTerm, setDirtySearchTerm] = useState("");
+    const [washingSearchTerm, setWashingSearchTerm] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [activeAction, setActiveAction] = useState<"start" | "finish" | null>(
         null,
     );
 
-    const dirtyStocks = stocks.filter((s) => s.dirty_qty > 0);
-    const washingStocks = stocks.filter((s) => s.washing_qty > 0);
+    // Filter stocks per list
+    const dirtyStocks = stocks.filter(
+        (s) =>
+            s.dirty_qty > 0 &&
+            (dirtySearchTerm === "" ||
+                s.linen.name
+                    .toLowerCase()
+                    .includes(dirtySearchTerm.toLowerCase()) ||
+                s.linen.sku_code
+                    .toLowerCase()
+                    .includes(dirtySearchTerm.toLowerCase())),
+    );
+    const washingStocks = stocks.filter(
+        (s) =>
+            s.washing_qty > 0 &&
+            (washingSearchTerm === "" ||
+                s.linen.name
+                    .toLowerCase()
+                    .includes(washingSearchTerm.toLowerCase()) ||
+                s.linen.sku_code
+                    .toLowerCase()
+                    .includes(washingSearchTerm.toLowerCase())),
+    );
 
     const toggleDirtyItem = (stock: CentralStock) => {
         const exists = selectedDirty.find((s) => s.linen_id === stock.linen_id);
@@ -149,12 +184,10 @@ export default function ProsesCuciIndex({ stocks }: Props) {
                     linen_id: item.linen_id,
                     qty: item.qty,
                 })),
-                notes,
             },
             {
                 onSuccess: () => {
                     setSelectedDirty([]);
-                    setNotes("");
                 },
                 onFinish: () => {
                     setIsSubmitting(false);
@@ -177,12 +210,10 @@ export default function ProsesCuciIndex({ stocks }: Props) {
                     linen_id: item.linen_id,
                     qty: item.qty,
                 })),
-                notes,
             },
             {
                 onSuccess: () => {
                     setSelectedWashing([]);
-                    setNotes("");
                 },
                 onFinish: () => {
                     setIsSubmitting(false);
@@ -190,6 +221,17 @@ export default function ProsesCuciIndex({ stocks }: Props) {
                 },
             },
         );
+    };
+
+    const formatDateTime = (dateString: string) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString("id-ID", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
     };
 
     return (
@@ -231,18 +273,37 @@ export default function ProsesCuciIndex({ stocks }: Props) {
                                     </CardDescription>
                                 </div>
                                 <span className="text-2xl font-bold text-red-600">
-                                    {dirtyStocks.reduce(
-                                        (acc, s) => acc + s.dirty_qty,
-                                        0,
-                                    )}
+                                    {stocks
+                                        .filter((s) => s.dirty_qty > 0)
+                                        .reduce(
+                                            (acc, s) => acc + s.dirty_qty,
+                                            0,
+                                        )}
                                 </span>
+                            </div>
+                            {/* Search input for dirty stocks */}
+                            <div className="relative mt-3">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input
+                                    type="text"
+                                    placeholder="Cari linen kotor..."
+                                    value={dirtySearchTerm}
+                                    onChange={(e) =>
+                                        setDirtySearchTerm(e.target.value)
+                                    }
+                                    className="pl-9 h-9 text-sm"
+                                />
                             </div>
                         </CardHeader>
                         <CardContent>
                             {dirtyStocks.length === 0 ? (
                                 <div className="text-center py-8 text-slate-500">
                                     <Package className="h-12 w-12 mx-auto mb-2 text-slate-300" />
-                                    <p>Tidak ada linen kotor</p>
+                                    <p>
+                                        {dirtySearchTerm
+                                            ? "Tidak ditemukan"
+                                            : "Tidak ada linen kotor"}
+                                    </p>
                                 </div>
                             ) : (
                                 <div className="space-y-4">
@@ -352,18 +413,37 @@ export default function ProsesCuciIndex({ stocks }: Props) {
                                     </CardDescription>
                                 </div>
                                 <span className="text-2xl font-bold text-amber-600">
-                                    {washingStocks.reduce(
-                                        (acc, s) => acc + s.washing_qty,
-                                        0,
-                                    )}
+                                    {stocks
+                                        .filter((s) => s.washing_qty > 0)
+                                        .reduce(
+                                            (acc, s) => acc + s.washing_qty,
+                                            0,
+                                        )}
                                 </span>
+                            </div>
+                            {/* Search input for washing stocks */}
+                            <div className="relative mt-3">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input
+                                    type="text"
+                                    placeholder="Cari linen sedang cuci..."
+                                    value={washingSearchTerm}
+                                    onChange={(e) =>
+                                        setWashingSearchTerm(e.target.value)
+                                    }
+                                    className="pl-9 h-9 text-sm"
+                                />
                             </div>
                         </CardHeader>
                         <CardContent>
                             {washingStocks.length === 0 ? (
                                 <div className="text-center py-8 text-slate-500">
                                     <WashingMachine className="h-12 w-12 mx-auto mb-2 text-slate-300" />
-                                    <p>Tidak ada linen sedang dicuci</p>
+                                    <p>
+                                        {washingSearchTerm
+                                            ? "Tidak ditemukan"
+                                            : "Tidak ada linen sedang dicuci"}
+                                    </p>
                                 </div>
                             ) : (
                                 <div className="space-y-4">
@@ -459,20 +539,74 @@ export default function ProsesCuciIndex({ stocks }: Props) {
                     </Card>
                 </div>
 
-                {/* Notes */}
+                {/* Wash History */}
                 <Card>
                     <CardHeader className="pb-4">
-                        <CardTitle className="text-base">
-                            Catatan (Opsional)
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <History className="h-4 w-4 text-primary" />
+                            Riwayat Cuci Terbaru
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <Textarea
-                            value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
-                            placeholder="Tambahkan catatan jika diperlukan..."
-                            rows={2}
-                        />
+                        {washLogs && washLogs.length > 0 ? (
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Waktu</TableHead>
+                                            <TableHead>Linen</TableHead>
+                                            <TableHead>Aksi</TableHead>
+                                            <TableHead className="text-right">
+                                                Qty
+                                            </TableHead>
+                                            <TableHead>Operator</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {washLogs.map((log) => (
+                                            <TableRow key={log.id}>
+                                                <TableCell className="text-sm text-slate-600">
+                                                    <div className="flex items-center gap-1">
+                                                        <Clock className="h-3 w-3" />
+                                                        {formatDateTime(
+                                                            log.logged_at,
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="font-medium">
+                                                    {log.linen?.name}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge
+                                                        className={
+                                                            log.action ===
+                                                            "start"
+                                                                ? "bg-amber-100 text-amber-700"
+                                                                : "bg-emerald-100 text-emerald-700"
+                                                        }
+                                                    >
+                                                        {log.action === "start"
+                                                            ? "Mulai Cuci"
+                                                            : "Selesai Cuci"}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right font-semibold">
+                                                    {log.qty}
+                                                </TableCell>
+                                                <TableCell className="text-sm text-slate-500">
+                                                    {log.user?.name}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        ) : (
+                            <div className="text-center py-6 text-slate-500">
+                                <History className="h-10 w-10 mx-auto mb-2 text-slate-300" />
+                                <p>Belum ada riwayat cuci</p>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>

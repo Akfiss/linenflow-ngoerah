@@ -1,19 +1,8 @@
 import { usePage } from "@inertiajs/react";
-
-interface AuthProps {
-    user: {
-        id: number;
-        name: string;
-        email: string;
-        role?: string;
-        room_id?: number | null;
-    };
-    permissions: string[];
-    roles: string[];
-}
+import { PageProps } from "@/types";
 
 export function usePermission() {
-    const { auth } = usePage<{ auth: AuthProps }>().props;
+    const { auth } = usePage<PageProps>().props;
 
     const can = (permission: string): boolean => {
         return auth.permissions?.includes(permission) ?? false;

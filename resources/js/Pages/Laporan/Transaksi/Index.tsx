@@ -18,6 +18,7 @@ import {
     DialogTitle,
 } from "@/Components/ui/dialog";
 import { Badge } from "@/Components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/Components/ui/card";
 import {
     FileText,
     Search,
@@ -34,6 +35,9 @@ import {
     CheckCircle,
     Clock,
     Package,
+    WashingMachine,
+    Play,
+    Check,
 } from "lucide-react";
 
 interface User {
@@ -81,11 +85,21 @@ interface PaginatedTransactions {
     links: Array<{ url: string | null; label: string; active: boolean }>;
 }
 
+interface WashLog {
+    id: number;
+    linen_name: string;
+    qty: number;
+    action: "start" | "finish";
+    logged_at: string;
+    user_name: string;
+}
+
 interface Props {
     transactions: PaginatedTransactions;
     rooms: Room[];
     users: User[];
     types: Record<string, string>;
+    washLogs?: WashLog[];
     filters: {
         type: string | null;
         room: string | null;
@@ -103,6 +117,7 @@ export default function LogTransaksi({
     rooms,
     users,
     types,
+    washLogs,
     filters,
 }: Props) {
     const [showFilters, setShowFilters] = useState(false);
@@ -594,6 +609,82 @@ export default function LogTransaksi({
                         </div>
                     </div>
                 </div>
+
+                {/* Wash Logs Section - Synced with Proses Cuci */}
+                {washLogs && washLogs.length > 0 && (
+                    <Card className="shadow-sm">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-lg font-bold flex items-center gap-2">
+                                <WashingMachine className="h-5 w-5 text-cyan-600" />
+                                Riwayat Cuci Terbaru
+                            </CardTitle>
+                            <p className="text-sm text-slate-500">
+                                Timestamps dari Proses Cuci
+                            </p>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b text-xs text-slate-500 uppercase">
+                                            <th className="p-2 text-left">
+                                                Waktu
+                                            </th>
+                                            <th className="p-2 text-left">
+                                                Linen
+                                            </th>
+                                            <th className="p-2 text-left">
+                                                Aksi
+                                            </th>
+                                            <th className="p-2 text-center">
+                                                Qty
+                                            </th>
+                                            <th className="p-2 text-left">
+                                                Operator
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {washLogs.slice(0, 10).map((log) => (
+                                            <tr
+                                                key={log.id}
+                                                className="hover:bg-slate-50"
+                                            >
+                                                <td className="p-2 text-slate-600 font-mono text-xs">
+                                                    {formatDateTime(
+                                                        log.logged_at,
+                                                    )}
+                                                </td>
+                                                <td className="p-2 font-medium">
+                                                    {log.linen_name || "-"}
+                                                </td>
+                                                <td className="p-2">
+                                                    {log.action === "start" ? (
+                                                        <Badge className="bg-cyan-100 text-cyan-700 border-cyan-200 gap-1">
+                                                            <Play className="h-3 w-3" />
+                                                            Mulai
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 gap-1">
+                                                            <Check className="h-3 w-3" />
+                                                            Selesai
+                                                        </Badge>
+                                                    )}
+                                                </td>
+                                                <td className="p-2 text-center font-bold">
+                                                    {log.qty}
+                                                </td>
+                                                <td className="p-2 text-slate-600">
+                                                    {log.user_name || "-"}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
 
             {/* Detail Modal */}

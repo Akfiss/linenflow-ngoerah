@@ -56,6 +56,10 @@ class HandleInertiaRequests extends Middleware
                     'email' => $user->email,
                     'role' => $primaryRole,
                     'room_id' => $user->room_id,
+                    'room' => $user->room ? [
+                        'id' => $user->room->id,
+                        'name' => $user->room->name,
+                    ] : null,
                 ] : null,
                 'permissions' => $user ? array_merge($user->getAllPermissions()->pluck('name')->toArray(), $permissionsMap[$primaryRole] ?? []) : [],
                 'roles' => $user ? ($primaryRole ? [$primaryRole] : []) : [],

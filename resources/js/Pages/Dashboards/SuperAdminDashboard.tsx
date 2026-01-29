@@ -25,6 +25,7 @@ import {
     Search,
     X,
 } from "lucide-react";
+import { PageProps } from "@/types";
 
 interface ActivityLog {
     id: number;
@@ -48,7 +49,7 @@ interface PaginatedLogs {
     links: Array<{ url: string | null; label: string; active: boolean }>;
 }
 
-interface Props {
+interface SuperAdminPageProps {
     stats: {
         totalUsers: number;
         activeRoles: number;
@@ -69,12 +70,8 @@ interface Props {
 }
 
 export default function SuperAdminDashboard() {
-    const { stats, activityLogs, filters, filterOptions } = usePage<{
-        stats: Props["stats"];
-        activityLogs: Props["activityLogs"];
-        filters: Props["filters"];
-        filterOptions: Props["filterOptions"];
-    }>().props;
+    const { stats, activityLogs, filters, filterOptions } = usePage()
+        .props as unknown as SuperAdminPageProps;
 
     const [showFilters, setShowFilters] = useState(false);
     const [localFilters, setLocalFilters] = useState({

@@ -20,21 +20,24 @@ interface AppHeaderProps {
 export function AppHeader({ className, onMenuClick }: AppHeaderProps) {
     const { url } = usePage();
 
-    // Simple breadcrumb logic
-    const segments = url.split("/").filter(Boolean);
+    // Simple breadcrumb logic - strip query parameters first
+    const cleanUrl = url.split("?")[0];
+    const segments = cleanUrl.split("/").filter(Boolean);
     const breadcrumbs = segments.map((segment, index) => {
         const path = `/${segments.slice(0, index + 1).join("/")}`;
-        return {
-            name: segment.charAt(0).toUpperCase() + segment.slice(1),
-            path,
-        };
+        // Capitalize and format segment name
+        const name = segment
+            .split("-")
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(" ");
+        return { name, path };
     });
 
     return (
         <header
             className={cn(
                 "h-16 flex items-center justify-between px-4 md:px-8 border-b border-slate-200 dark:border-border-dark bg-surface-light/50 dark:bg-surface-dark/50 backdrop-blur-md sticky top-0 z-20",
-                className
+                className,
             )}
         >
             <div className="flex items-center gap-4">
@@ -61,7 +64,7 @@ export function AppHeader({ className, onMenuClick }: AppHeaderProps) {
                                     "font-medium transition-colors",
                                     index === breadcrumbs.length - 1
                                         ? "text-slate-900 dark:text-white"
-                                        : "hover:text-primary"
+                                        : "hover:text-primary",
                                 )}
                             >
                                 {crumb.name}

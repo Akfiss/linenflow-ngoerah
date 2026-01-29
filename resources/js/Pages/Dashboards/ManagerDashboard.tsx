@@ -4,11 +4,17 @@ import { Button } from "@/Components/ui/button";
 import {
     Area,
     AreaChart,
+    Bar,
+    BarChart,
+    Cell,
+    Pie,
+    PieChart,
     ResponsiveContainer,
     Tooltip,
     XAxis,
     YAxis,
     CartesianGrid,
+    Legend,
 } from "recharts";
 import {
     Check,
@@ -27,6 +33,7 @@ import {
     Minus,
 } from "lucide-react";
 import { usePage, Link } from "@inertiajs/react";
+import RequestLinenModal from "@/Components/RequestLinenModal";
 
 // Types for props
 interface Stats {
@@ -60,6 +67,17 @@ interface MonthlyTransactions {
     [key: string]: number;
 }
 
+interface TopLinen {
+    name: string;
+    total: number;
+}
+
+interface CategoryDistribution {
+    name: string;
+    value: number;
+    color: string;
+}
+
 export default function ManagerDashboard() {
     const {
         auth,
@@ -68,6 +86,8 @@ export default function ManagerDashboard() {
         recentTransactions,
         monthlyTransactions,
         chartData: chartDataProp,
+        topLinens,
+        categoryDistribution,
     } = usePage().props as any;
 
     // State for chart period selection
@@ -78,6 +98,9 @@ export default function ManagerDashboard() {
     // Get current chart data based on period
     const currentChartData = chartDataProp?.[chartPeriod] || [];
     const currentTotal = chartDataProp?.totals?.[chartPeriod] || 0;
+
+    // State for Request Linen modal
+    const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
 
     // Period labels
     const periodLabels = {
@@ -169,11 +192,16 @@ export default function ManagerDashboard() {
                     </div>
 
                     <div className="flex gap-2">
-                        <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-[#2b303b] border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 transition-colors">
-                            <Download className="w-[18px] h-[18px]" />
-                            Export Report
-                        </button>
-                        <button className="flex items-center gap-2 px-4 py-2 bg-[#298fa3] text-white rounded-lg text-sm font-medium shadow-sm hover:bg-[#1f7a8c] transition-colors">
+                        <Link href={route("laporan.kinerja")}>
+                            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-[#2b303b] border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 transition-colors">
+                                <Download className="w-[18px] h-[18px]" />
+                                Export Report
+                            </button>
+                        </Link>
+                        <button
+                            onClick={() => setIsRequestModalOpen(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-[#298fa3] text-white rounded-lg text-sm font-medium shadow-sm hover:bg-[#1f7a8c] transition-colors"
+                        >
                             <Plus className="w-[18px] h-[18px]" />
                             Request Linen
                         </button>
@@ -367,6 +395,156 @@ export default function ManagerDashboard() {
                 </div>
             </div>
 
+            {/* Additional Charts Row - Bar Chart & Pie Chart */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                {/* Bar Chart - Top 5 Linen */}
+                <div className="bg-white dark:bg-[#2b303b] rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm p-6">
+                    <div className="mb-6">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                            Top 5 Linen Terbanyak
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                            Distribusi 30 hari terakhir
+                        </p>
+                    </div>
+                    <div className="h-[250px] w-full">
+                        {topLinens && topLinens.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart
+                                    data={topLinens}
+                                    layout="vertical"
+                                    margin={{
+                                        top: 5,
+                                        right: 30,
+                                        left: 20,
+                                        bottom: 5,
+                                    }}
+                                >
+                                    <CartesianGrid
+                                        strokeDasharray="3 3"
+                                        horizontal={true}
+                                        vertical={false}
+                                        stroke="#f1f5f9"
+                                    />
+                                    <XAxis
+                                        type="number"
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tick={{
+                                            fill: "#94a3b8",
+                                            fontSize: 12,
+                                        }}
+                                    />
+                                    <YAxis
+                                        type="category"
+                                        dataKey="name"
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tick={{
+                                            fill: "#64748b",
+                                            fontSize: 12,
+                                        }}
+                                        width={100}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "#1e293b",
+                                            border: "none",
+                                            borderRadius: "8px",
+                                            color: "#fff",
+                                        }}
+                                        cursor={{
+                                            fill: "rgba(41, 143, 163, 0.1)",
+                                        }}
+                                    />
+                                    <Bar
+                                        dataKey="total"
+                                        fill="#298fa3"
+                                        radius={[0, 4, 4, 0]}
+                                        animationDuration={1000}
+                                    />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-slate-500">
+                                Belum ada data distribusi
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Pie Chart - Distribution by Category */}
+                <div className="bg-white dark:bg-[#2b303b] rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm p-6">
+                    <div className="mb-6">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                            Distribusi per Kategori
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                            30 hari terakhir
+                        </p>
+                    </div>
+                    <div className="h-[250px] w-full">
+                        {categoryDistribution &&
+                        categoryDistribution.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={categoryDistribution}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={60}
+                                        outerRadius={90}
+                                        paddingAngle={4}
+                                        dataKey="value"
+                                        animationDuration={1000}
+                                        label={({ name, percent }) =>
+                                            `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`
+                                        }
+                                        labelLine={false}
+                                    >
+                                        {categoryDistribution.map(
+                                            (
+                                                entry: CategoryDistribution,
+                                                index: number,
+                                            ) => (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={entry.color}
+                                                />
+                                            ),
+                                        )}
+                                    </Pie>
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "#1e293b",
+                                            border: "none",
+                                            borderRadius: "8px",
+                                            color: "#fff",
+                                        }}
+                                        formatter={(value) => [
+                                            `${(value ?? 0).toLocaleString()} pcs`,
+                                            "Total",
+                                        ]}
+                                    />
+                                    <Legend
+                                        layout="horizontal"
+                                        verticalAlign="bottom"
+                                        align="center"
+                                        wrapperStyle={{
+                                            paddingTop: "20px",
+                                        }}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-slate-500">
+                                Belum ada data kategori
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
             {/* Bottom Row Widgets */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Par Level Alerts */}
@@ -518,6 +696,12 @@ export default function ManagerDashboard() {
                     </Link>
                 </div>
             </div>
+
+            {/* Request Linen Modal */}
+            <RequestLinenModal
+                open={isRequestModalOpen}
+                onOpenChange={setIsRequestModalOpen}
+            />
         </div>
     );
 }

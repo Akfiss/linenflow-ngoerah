@@ -228,6 +228,20 @@ class ReportController extends Controller
             'rooms' => $rooms,
             'users' => $users,
             'types' => $types,
+            'washLogs' => \App\Models\WashLog::with(['linen', 'user'])
+                ->orderBy('logged_at', 'desc')
+                ->limit(100)
+                ->get()
+                ->map(function ($log) {
+                    return [
+                        'id' => $log->id,
+                        'linen_name' => $log->linen?->name,
+                        'qty' => $log->qty,
+                        'action' => $log->action,
+                        'logged_at' => $log->logged_at?->format('Y-m-d H:i:s'),
+                        'user_name' => $log->user?->name,
+                    ];
+                }),
             'filters' => [
                 'type' => $request->type,
                 'room' => $request->room,

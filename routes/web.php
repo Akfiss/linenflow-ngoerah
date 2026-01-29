@@ -118,6 +118,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/history', [DisposalController::class, 'history'])->name('history');
     });
 
+    // Linen Request
+    Route::prefix('produksi/request')->name('linen-request.')->middleware('permission:view_own_dashboard')->group(function () {
+        Route::get('/linens', [\App\Http\Controllers\LinenRequestController::class, 'getLinens'])->name('linens');
+        Route::post('/store', [\App\Http\Controllers\LinenRequestController::class, 'store'])->name('store');
+        Route::get('/', [\App\Http\Controllers\LinenRequestController::class, 'index'])->name('index');
+    });
+
     /*
     |--------------------------------------------------------------------------
     | Inventaris Routes

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/Components/ui/card";
 import { Button } from "@/Components/ui/button";
 import { ScrollArea } from "@/Components/ui/scroll-area";
-import { usePage } from "@inertiajs/react";
+import { usePage, Link } from "@inertiajs/react";
 import {
     Truck,
     ArrowRightToLine,
@@ -52,8 +52,8 @@ export default function OperatorDashboard() {
     const toggleTask = (id: number) => {
         setTasks(
             tasks.map((t) =>
-                t.id === id ? { ...t, completed: !t.completed } : t
-            )
+                t.id === id ? { ...t, completed: !t.completed } : t,
+            ),
         );
     };
 
@@ -192,68 +192,78 @@ export default function OperatorDashboard() {
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {/* Distribute Button */}
-                        <button className="group relative flex flex-col justify-between p-6 h-40 rounded-2xl bg-[#22a8c3] text-white hover:bg-[#22a8c3]/90 transition-all shadow-lg shadow-[#22a8c3]/20 overflow-hidden text-left">
-                            <div className="absolute right-0 top-0 p-4 opacity-20 group-hover:opacity-30 group-hover:scale-110 transition-all">
-                                <Truck className="w-24 h-24 -mr-6 -mt-6" />
-                            </div>
-                            <div className="bg-white/20 w-fit p-2 rounded-lg backdrop-blur-sm">
-                                <Plus className="w-6 h-6" />
-                            </div>
-                            <div>
-                                <p className="text-xl font-bold">
-                                    Distribusi Bersih
-                                </p>
-                                <p className="text-white/80 text-sm mt-1">
-                                    Kirim linen ke ruangan
-                                </p>
-                            </div>
-                        </button>
+                        <Link href="/sirkulasi/distribusi" className="block">
+                            <button className="group relative flex flex-col justify-between p-6 h-40 w-full rounded-2xl bg-[#22a8c3] text-white hover:bg-[#22a8c3]/90 transition-all shadow-lg shadow-[#22a8c3]/20 overflow-hidden text-left">
+                                <div className="absolute right-0 top-0 p-4 opacity-20 group-hover:opacity-30 group-hover:scale-110 transition-all">
+                                    <Truck className="w-24 h-24 -mr-6 -mt-6" />
+                                </div>
+                                <div className="bg-white/20 w-fit p-2 rounded-lg backdrop-blur-sm">
+                                    <Plus className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <p className="text-xl font-bold">
+                                        Distribusi Bersih
+                                    </p>
+                                    <p className="text-white/80 text-sm mt-1">
+                                        Kirim linen ke ruangan
+                                    </p>
+                                </div>
+                            </button>
+                        </Link>
 
                         {/* Receive Button */}
-                        <button className="group relative flex flex-col justify-between p-6 h-40 rounded-2xl bg-white dark:bg-[#2d333b] border-2 border-[#22a8c3]/20 hover:border-[#22a8c3] text-slate-900 dark:text-white hover:shadow-lg transition-all text-left">
-                            <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 group-hover:scale-110 transition-all">
-                                <ArrowRightToLine className="w-24 h-24 -mr-6 -mt-6 text-[#22a8c3]" />
-                            </div>
-                            <div className="bg-[#22a8c3]/10 w-fit p-2 rounded-lg text-[#22a8c3]">
-                                <Plus className="w-6 h-6" />
-                            </div>
-                            <div>
-                                <p className="text-xl font-bold">
-                                    Terima Kotor
-                                </p>
-                                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                                    Input linen masuk
-                                </p>
-                            </div>
-                        </button>
+                        <Link href="/sirkulasi/penerimaan" className="block">
+                            <button className="group relative flex flex-col justify-between p-6 h-40 w-full rounded-2xl bg-white dark:bg-[#2d333b] border-2 border-[#22a8c3]/20 hover:border-[#22a8c3] text-slate-900 dark:text-white hover:shadow-lg transition-all text-left">
+                                <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 group-hover:scale-110 transition-all">
+                                    <ArrowRightToLine className="w-24 h-24 -mr-6 -mt-6 text-[#22a8c3]" />
+                                </div>
+                                <div className="bg-[#22a8c3]/10 w-fit p-2 rounded-lg text-[#22a8c3]">
+                                    <Plus className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <p className="text-xl font-bold">
+                                        Terima Kotor
+                                    </p>
+                                    <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+                                        Input linen masuk
+                                    </p>
+                                </div>
+                            </button>
+                        </Link>
 
                         {/* Start Wash */}
-                        <button className="group relative flex flex-col justify-between p-6 h-40 rounded-2xl bg-white dark:bg-[#2d333b] border border-slate-200 dark:border-slate-700 hover:border-[#22a8c3]/50 text-slate-900 dark:text-white hover:shadow-md transition-all text-left">
-                            <div className="bg-slate-100 dark:bg-slate-800 w-fit p-2 rounded-lg text-slate-600 dark:text-slate-300 group-hover:text-[#22a8c3] group-hover:bg-[#22a8c3]/10 transition-colors">
-                                <Play className="w-6 h-6" />
-                            </div>
-                            <div>
-                                <p className="text-lg font-bold">Mulai Cuci</p>
-                                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                                    Set mesin & cycle
-                                </p>
-                            </div>
-                        </button>
+                        <Link href="/produksi/cuci" className="block">
+                            <button className="group relative flex flex-col justify-between p-6 h-40 w-full rounded-2xl bg-white dark:bg-[#2d333b] border border-slate-200 dark:border-slate-700 hover:border-[#22a8c3]/50 text-slate-900 dark:text-white hover:shadow-md transition-all text-left">
+                                <div className="bg-slate-100 dark:bg-slate-800 w-fit p-2 rounded-lg text-slate-600 dark:text-slate-300 group-hover:text-[#22a8c3] group-hover:bg-[#22a8c3]/10 transition-colors">
+                                    <Play className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <p className="text-lg font-bold">
+                                        Mulai Cuci
+                                    </p>
+                                    <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+                                        Set mesin & cycle
+                                    </p>
+                                </div>
+                            </button>
+                        </Link>
 
                         {/* Finish Wash */}
-                        <button className="group relative flex flex-col justify-between p-6 h-40 rounded-2xl bg-white dark:bg-[#2d333b] border border-slate-200 dark:border-slate-700 hover:border-[#22a8c3]/50 text-slate-900 dark:text-white hover:shadow-md transition-all text-left">
-                            <div className="bg-slate-100 dark:bg-slate-800 w-fit p-2 rounded-lg text-slate-600 dark:text-slate-300 group-hover:text-green-600 group-hover:bg-green-50 transition-colors">
-                                <Check className="w-6 h-6" />
-                            </div>
-                            <div>
-                                <p className="text-lg font-bold">
-                                    Selesai Cuci
-                                </p>
-                                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                                    Konfirmasi hasil cuci
-                                </p>
-                            </div>
-                        </button>
+                        <Link href="/produksi/cuci" className="block">
+                            <button className="group relative flex flex-col justify-between p-6 h-40 w-full rounded-2xl bg-white dark:bg-[#2d333b] border border-slate-200 dark:border-slate-700 hover:border-[#22a8c3]/50 text-slate-900 dark:text-white hover:shadow-md transition-all text-left">
+                                <div className="bg-slate-100 dark:bg-slate-800 w-fit p-2 rounded-lg text-slate-600 dark:text-slate-300 group-hover:text-green-600 group-hover:bg-green-50 transition-colors">
+                                    <Check className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <p className="text-lg font-bold">
+                                        Selesai Cuci
+                                    </p>
+                                    <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+                                        Konfirmasi hasil cuci
+                                    </p>
+                                </div>
+                            </button>
+                        </Link>
                     </div>
                 </div>
 

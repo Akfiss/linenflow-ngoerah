@@ -128,6 +128,44 @@ class DashboardController extends Controller
         $total30Days = array_sum(array_column($chart30Days, 'total'));
         $totalThisMonth = array_sum(array_column($chartThisMonth, 'total'));
 
+        // Get Top 5 linen by distribution quantity (last 30 days)
+        $topLinens = \DB::table('transaction_details')
+            ->join('transactions', 'transactions.id', '=', 'transaction_details.transaction_id')
+            ->join('linens', 'linens.id', '=', 'transaction_details.linen_id')
+            ->where('transactions.type', Transaction::TYPE_OUT_DISTRIBUTION)
+            ->where('transactions.trx_date', '>=', now()->subDays(30)->toDateString())
+            ->select('linens.name', \DB::raw('SUM(transaction_details.qty) as total'))
+            ->groupBy('linens.id', 'linens.name')
+            ->orderByDesc('total')
+            ->limit(5)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'name' => $item->name,
+                    'total' => (int) $item->total,
+                ];
+            });
+
+        // Get distribution by linen category (last 30 days)
+        $categoryDistribution = \DB::table('transaction_details')
+            ->join('transactions', 'transactions.id', '=', 'transaction_details.transaction_id')
+            ->join('linens', 'linens.id', '=', 'transaction_details.linen_id')
+            ->join('linen_categories', 'linen_categories.id', '=', 'linens.linen_category_id')
+            ->where('transactions.type', Transaction::TYPE_OUT_DISTRIBUTION)
+            ->where('transactions.trx_date', '>=', now()->subDays(30)->toDateString())
+            ->select('linen_categories.name', \DB::raw('SUM(transaction_details.qty) as total'))
+            ->groupBy('linen_categories.id', 'linen_categories.name')
+            ->orderByDesc('total')
+            ->get()
+            ->map(function ($item, $index) {
+                $colors = ['#298fa3', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+                return [
+                    'name' => $item->name,
+                    'value' => (int) $item->total,
+                    'color' => $colors[$index % count($colors)],
+                ];
+            });
+
 
         // Get total counts
         $totalLinens = Linen::count();
@@ -222,6 +260,8 @@ class DashboardController extends Controller
                     'thisMonth' => $totalThisMonth,
                 ],
             ],
+            'topLinens' => $topLinens,
+            'categoryDistribution' => $categoryDistribution,
             'ownRoomStock' => $ownRoomStock,
             'ownRoomPending' => $ownRoomPending,
             'ownRoomTransactions' => $ownRoomTransactions,
